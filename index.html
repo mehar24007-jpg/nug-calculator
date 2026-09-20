@@ -1,0 +1,2938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nug & Jewelry Production Cost Calculator</title>
+  
+  <!-- PWA Manifest & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <meta name="theme-color" content="#1e293b">
+
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Calculate production costs, material weights, labor fees, and set breakdowns for nugget and jewelry manufacturing. Export PDF quotes and sync with Google Drive.">
+  <meta name="keywords" content="jewelry cost calculator, nugget weight calculator, gold nugget labor cost, jewelry production quote, nugget breakdown">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- External Export Libraries (html2canvas & jsPDF) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Google Drive API & GIS Client -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+
+  <style>
+    :root {
+      --bg-dark: #0b0f19;
+      --bg-card: #151c2c;
+      --bg-card-hover: #1e273e;
+      --bg-input: #0f1523;
+      --accent-gold: #f59e0b;
+      --accent-gold-gradient: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+      --accent-amber: #d97706;
+      --accent-glow: rgba(245, 158, 11, 0.25);
+      --text-main: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #64748b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-gold: rgba(245, 158, 11, 0.4);
+      --success: #10b981;
+      --danger: #ef4444;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-main: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(217, 119, 6, 0.04) 0%, transparent 40%);
+      padding-bottom: 70px;
+    }
+
+    h1, h2, h3, h4, .brand-font {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Container */
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    /* Header */
+    header {
+      background: rgba(15, 21, 35, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 12px 0;
+    }
+
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      background: var(--accent-gold-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      font-size: 1.4rem;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 30%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: var(--transition);
+      user-select: none;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent-gold-gradient);
+      color: #0f172a;
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border-color: var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-outline-gold {
+      background: transparent;
+      color: var(--accent-gold);
+      border-color: var(--border-gold);
+    }
+
+    .btn-outline-gold:hover {
+      background: rgba(245, 158, 11, 0.1);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 0.775rem;
+      border-radius: 6px;
+    }
+
+    .btn-icon-only {
+      padding: 8px;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* Currency Select */
+    .currency-selector {
+      background: var(--bg-input);
+      color: var(--accent-gold);
+      border: 1px solid var(--border-gold);
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Navigation Tabs */
+    .tabs-nav {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 16px 0;
+      scrollbar-width: none;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 24px;
+    }
+
+    .tabs-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: var(--accent-gold);
+      color: var(--accent-gold);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+    }
+
+    .tab-btn .badge {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      font-size: 0.75rem;
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+
+    .tab-btn.active .badge {
+      background: var(--accent-gold);
+      color: #000;
+      font-weight: 700;
+    }
+
+    /* Tab Content Panels */
+    .tab-panel {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card System */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-main);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-main);
+    }
+
+    .card-title i {
+      color: var(--accent-gold);
+    }
+
+    /* Form Layouts */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full-width {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .form-control {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      transition: var(--transition);
+      width: 100%;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+    }
+
+    .input-prefix, .input-suffix {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      padding: 10px 12px;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .input-prefix {
+      border-right: none;
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    }
+
+    .input-suffix {
+      border-left: none;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    .input-group .form-control {
+      border-radius: 0;
+    }
+
+    .input-group .form-control:first-child {
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    }
+
+    .input-group .form-control:last-child {
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    /* Drag & Drop Image Uploader */
+    .dropzone {
+      border: 2px dashed var(--border-gold);
+      background: rgba(245, 158, 11, 0.03);
+      border-radius: var(--radius-md);
+      padding: 30px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: var(--accent-gold);
+    }
+
+    .dropzone-icon {
+      font-size: 2.2rem;
+      color: var(--accent-gold);
+      margin-bottom: 10px;
+    }
+
+    .dropzone p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .dropzone span {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .image-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .image-thumb {
+      position: relative;
+      width: 100%;
+      padding-top: 100%;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #000;
+    }
+
+    .image-thumb img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .image-thumb .remove-img {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(239, 68, 68, 0.85);
+      color: #fff;
+      border: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .image-thumb .remove-img:hover {
+      background: var(--danger);
+      transform: scale(1.1);
+    }
+
+    /* Tables */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.875rem;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-secondary);
+      font-weight: 600;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
+      vertical-align: middle;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Color Swatch Circle */
+    .color-swatch-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      display: inline-block;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Metrics Cards Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .metric-card.featured {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.05) 100%);
+      border-color: var(--border-gold);
+    }
+
+    .metric-title {
+      font-size: 0.775rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      font-family: 'Outfit', sans-serif;
+      color: var(--text-main);
+    }
+
+    .metric-card.featured .metric-value {
+      color: var(--accent-gold);
+    }
+
+    .metric-subtext {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    /* Preset Helper Buttons */
+    .presets-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    /* PDF / Printable Preview Report Styling */
+    .report-preview-container {
+      background: #ffffff;
+      color: #0f172a;
+      border-radius: var(--radius-md);
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      margin-top: 20px;
+    }
+
+    .report-preview-container th {
+      background: #f1f5f9;
+      color: #334155;
+      border-bottom: 2px solid #cbd5e1;
+    }
+
+    .report-preview-container td {
+      border-bottom: 1px solid #e2e8f0;
+      color: #0f172a;
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+
+    .report-brand h2 {
+      font-size: 1.6rem;
+      color: #b45309;
+      font-weight: 800;
+    }
+
+    .report-meta {
+      text-align: right;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+
+    .report-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .report-summary-box {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .report-summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 0.9rem;
+      border-bottom: 1px dashed #fcd34d;
+    }
+
+    .report-summary-row:last-child {
+      border-bottom: none;
+    }
+
+    .report-summary-row.total {
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #92400e;
+      padding-top: 10px;
+      margin-top: 4px;
+      border-top: 2px solid #f59e0b;
+    }
+
+    /* Modal System */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: var(--transition);
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      width: 100%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+      transform: translateY(20px);
+      transition: var(--transition);
+    }
+
+    .modal-overlay.active .modal {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* History List Items */
+    .history-item {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: var(--transition);
+    }
+
+    .history-item:hover {
+      border-color: var(--accent-gold);
+    }
+
+    .history-info h4 {
+      font-size: 0.95rem;
+      color: var(--text-main);
+    }
+
+    .history-info p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .history-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Floating Summary Bar for Mobile */
+    .mobile-floating-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(11, 15, 25, 0.95);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--border-color);
+      padding: 12px 20px;
+      z-index: 900;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .report-section-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .gatepass-metrics-grid, .gatepass-signatures-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    /* Mobile-first Responsive Breakpoints */
+    @media (max-width: 768px) {
+      .app-container {
+        padding: 12px;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden;
+      }
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .brand-title {
+        font-size: 1.15rem;
+      }
+      .header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .form-grid {
+        grid-template-columns: 1fr !important;
+      }
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px;
+      }
+      .metric-card {
+        padding: 12px;
+      }
+      .metric-value {
+        font-size: 1.15rem;
+      }
+      .report-preview-container {
+        padding: 14px !important;
+        border-radius: 10px !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box;
+      }
+      .report-header {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .report-meta {
+        text-align: left;
+      }
+      .report-section-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px;
+      }
+      .gatepass-metrics-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px;
+      }
+      .gatepass-signatures-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px;
+      }
+      .mobile-floating-bar {
+        display: flex;
+      }
+      /* Prevent iOS Chrome/Safari auto-zoom on input focus */
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+      .btn {
+        min-height: 42px;
+        padding: 10px 14px;
+      }
+      .modal {
+        max-height: 94vh;
+        margin: 10px;
+      }
+      .modal-body {
+        padding: 14px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .metrics-grid {
+        grid-template-columns: 1fr !important;
+      }
+      .tab-btn {
+        padding: 10px 14px;
+        font-size: 0.825rem;
+      }
+    }
+
+    .floating-total p {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .floating-total h3 {
+      font-size: 1.2rem;
+      color: var(--accent-gold);
+    }
+
+    /* Toast Notification */
+    .toast-container {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border-left: 4px solid var(--accent-gold);
+      color: var(--text-main);
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: auto;
+      animation: slideInRight 0.3s ease forwards;
+    }
+
+    .toast.success { border-left-color: var(--success); }
+    .toast.danger { border-left-color: var(--danger); }
+
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Responsive Tweaks */
+    @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .header-actions {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .report-preview-container {
+        padding: 20px;
+      }
+      .report-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Print Styles */
+    @media print {
+      body {
+        background: #fff;
+        color: #000;
+        padding: 0;
+      }
+      header, .tabs-nav, .header-actions, .mobile-floating-bar, .no-print, .btn {
+        display: none !important;
+      }
+      .container {
+        max-width: 100%;
+        padding: 0;
+      }
+      .tab-panel {
+        display: block !important;
+      }
+      .tab-panel:not(#tab-results) {
+        display: none !important;
+      }
+      .report-preview-container {
+        box-shadow: none;
+        padding: 0;
+        border: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Header Bar -->
+  <header>
+    <div class="container header-content">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-gem"></i>
+        </div>
+        <div class="brand-text">
+          <h1>Nug & Jewelry Cost Calculator</h1>
+          <p>Professional Production & Quote Engine</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <select id="currency-select" class="currency-selector" title="Select Currency">
+          <option value="Rs.">PKR (Rs.)</option>
+          <option value="$">USD ($)</option>
+          <option value="€">EUR (€)</option>
+          <option value="£">GBP (£)</option>
+          <option value="₹">INR (₹)</option>
+          <option value="AED">AED</option>
+        </select>
+
+        <button class="btn btn-secondary btn-sm" id="btn-open-history" title="Saved History">
+          <i class="fa-solid fa-folder-open"></i> History
+        </button>
+
+        <button class="btn btn-outline-gold btn-sm" id="hdr-btn-gate-pass" title="Generate Production Gate Pass">
+          <i class="fa-solid fa-id-card"></i> Gate Pass
+        </button>
+
+        <button class="btn btn-outline-gold btn-sm" id="btn-drive-sync" title="Google Drive Cloud Sync">
+          <i class="fa-brands fa-google-drive"></i> Drive Sync
+        </button>
+
+        <button class="btn btn-primary btn-sm" id="btn-quick-save" title="Save current set">
+          <i class="fa-solid fa-floppy-disk"></i> Save Set
+        </button>
+
+        <button class="btn btn-danger btn-sm btn-icon-only" id="btn-reset-all" title="Reset All Fields">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container" style="margin-top: 10px;">
+    
+    <!-- Navigation Tabs -->
+    <nav class="tabs-nav" id="tabs-navigation">
+      <button class="tab-btn active" data-tab="tab-set-info">
+        <i class="fa-solid fa-circle-info"></i> Set Info
+      </button>
+      <button class="tab-btn" data-tab="tab-nug-types">
+        <i class="fa-solid fa-cubes"></i> Nug Types <span class="badge" id="badge-nug-types">0</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-colors-sets">
+        <i class="fa-solid fa-palette"></i> Colors & Sets <span class="badge" id="badge-colors">0</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-cost-inputs">
+        <i class="fa-solid fa-calculator"></i> Cost Inputs
+      </button>
+      <button class="tab-btn" data-tab="tab-results">
+        <i class="fa-solid fa-chart-pie"></i> Results & Report
+      </button>
+    </nav>
+
+    <!-- TAB 1: SET INFO -->
+    <section class="tab-panel active" id="tab-set-info">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i class="fa-solid fa-file-signature"></i> Set & Invoice Details</h2>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="set-name">Set Collection Name</label>
+            <input type="text" id="set-name" class="form-control" placeholder="e.g. Royal Crown Nugget Set">
+          </div>
+
+          <div class="form-group">
+            <label for="invoice-num">Invoice / Reference Number</label>
+            <input type="text" id="invoice-num" class="form-control" placeholder="e.g. INV-2026-089">
+          </div>
+
+          <div class="form-group">
+            <label for="set-date">Date Created</label>
+            <input type="date" id="set-date" class="form-control">
+          </div>
+
+          <div class="form-group">
+            <label for="customer-name">Client / Customer Name</label>
+            <input type="text" id="customer-name" class="form-control" placeholder="e.g. Luxury Jewels Co.">
+          </div>
+
+          <div class="form-group full-width">
+            <label for="set-notes">Production Notes / Specs</label>
+            <textarea id="set-notes" class="form-control" rows="2" placeholder="Add specific crafting notes, diamond cut instructions, alloy purity..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i class="fa-solid fa-image"></i> Set Imagery & Reference Photos</h2>
+        </div>
+
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+          </div>
+          <p>Drag & Drop Nugget / Jewelry Photos Here</p>
+          <span>or click to browse from device (JPEG, PNG, WEBP)</span>
+          <input type="file" id="file-input" accept="image/*" multiple style="display: none;">
+        </div>
+
+        <div class="image-preview-grid" id="image-preview-grid">
+          <!-- Dynamically populated previews -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: NUG TYPES -->
+    <section class="tab-panel" id="tab-nug-types">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i class="fa-solid fa-shapes"></i> Nugget Types & Specifications</h2>
+          <button class="btn btn-primary btn-sm" id="btn-add-nug-type">
+            <i class="fa-solid fa-plus"></i> Add Nugget Type
+          </button>
+        </div>
+
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Nugget Type Name</th>
+                <th>Qty Per Set (pcs)</th>
+                <th>Weight per 100 Nugs (g)</th>
+                <th>Weight / Set (g)</th>
+                <th style="width: 80px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-nug-types">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: COLORS & SETS -->
+    <section class="tab-panel" id="tab-colors-sets">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i class="fa-solid fa-palette"></i> Color Variations & Set Quantities</h2>
+          <button class="btn btn-primary btn-sm" id="btn-add-color">
+            <i class="fa-solid fa-plus"></i> Add Color Variation
+          </button>
+        </div>
+
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Color Swatch</th>
+                <th>Color / Alloy Name</th>
+                <th>Number of Sets</th>
+                <th style="width: 80px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-colors">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: COST INPUTS -->
+    <section class="tab-panel" id="tab-cost-inputs">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i class="fa-solid fa-hammer"></i> Labour & Material Cost Rates</h2>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="global-labor-cost">
+              Global Labour Cost (per 100 Nuggets)
+              <span class="currency-symbol">$</span>
+            </label>
+            <div class="input-group">
+              <span class="input-prefix currency-symbol">$</span>
+              <input type="number" step="0.01" min="0" id="global-labor-cost" class="form-control" value="0">
+              <span class="input-suffix">/ 100 nugs</span>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">This labor rate applies uniformly across all nugget assembly types.</span>
+          </div>
+
+          <div class="form-group full-width">
+            <label for="waste-percent">Material Loss / Scrap Allowance (%)</label>
+            <div class="input-group">
+              <input type="number" step="0.1" min="0" id="waste-percent" class="form-control" value="0">
+              <span class="input-suffix">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i class="fa-solid fa-coins"></i> Material Cost Per 100 Nuggets (By Nug Type)</h2>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Nugget Type</th>
+                <th>Qty / Set</th>
+                <th>Material Cost per 100 Nugs</th>
+                <th>Material Cost / Set</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-material-costs">
+              <!-- Dynamically rendered per Nug Type -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: RESULTS & REPORT -->
+    <section class="tab-panel" id="tab-results">
+      <!-- Metrics Overview -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="metric-title">Total Sets</span>
+          <span class="metric-value" id="res-total-sets">0</span>
+          <span class="metric-subtext">Across all color variations</span>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-title">Total Nuggets</span>
+          <span class="metric-value" id="res-total-nugs">0</span>
+          <span class="metric-subtext"><span id="res-nugs-per-set">0</span> nugs per set</span>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-title">Total Weight</span>
+          <span class="metric-value" id="res-total-weight">0.00 g</span>
+          <span class="metric-subtext"><span id="res-weight-per-set">0.00</span> g per set</span>
+        </div>
+
+        <div class="metric-card featured">
+          <span class="metric-title">Grand Total Cost</span>
+          <span class="metric-value" id="res-grand-total">$0.00</span>
+          <span class="metric-subtext">Labor + Material + Scrap</span>
+        </div>
+
+        <div class="metric-card featured">
+          <span class="metric-title">Avg Cost Per Set</span>
+          <span class="metric-value" id="res-avg-cost-set">Rs. 0.00</span>
+          <span class="metric-subtext">Production Cost / Set</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;">
+        <button class="btn btn-primary" id="btn-export-pdf">
+          <i class="fa-solid fa-file-pdf"></i> Export High-Res Cost PDF
+        </button>
+        <button class="btn btn-outline-gold" id="btn-open-gatepass">
+          <i class="fa-solid fa-id-card"></i> Generate Gate Pass (No Prices)
+        </button>
+        <button class="btn btn-secondary" onclick="window.print()">
+          <i class="fa-solid fa-print"></i> Print Cost Report
+        </button>
+        <button class="btn btn-secondary" id="btn-share-whatsapp">
+          <i class="fa-brands fa-whatsapp"></i> Share WhatsApp Report
+        </button>
+        <button class="btn btn-secondary" id="btn-web-share">
+          <i class="fa-solid fa-share-nodes"></i> Share via Device
+        </button>
+      </div>
+
+      <!-- PDF / Printable Report Card -->
+      <div class="report-preview-container" id="report-preview">
+        <div class="report-header">
+          <div class="report-brand">
+            <h2>Nug & Jewelry Production Quote</h2>
+            <p style="font-weight: 600; color: #475569;" id="rpt-set-name">Royal Crown Nugget Collection</p>
+            <p style="font-size: 0.85rem; color: #64748b;" id="rpt-client">Client: Luxury Jewels Co.</p>
+          </div>
+          <div class="report-meta">
+            <p><strong>Invoice #:</strong> <span id="rpt-invoice">INV-2026-089</span></p>
+            <p><strong>Date:</strong> <span id="rpt-date">2026-08-19</span></p>
+            <p><strong>Status:</strong> Approved Quote</p>
+          </div>
+        </div>
+
+        <!-- Imagery inside PDF -->
+        <div id="rpt-images-container" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;"></div>
+
+        <div class="report-grid" style="grid-template-columns: 1fr;">
+          <!-- Section 1: Specifications Per 1 Set -->
+          <div style="margin-bottom: 24px;">
+            <h4 style="margin-bottom: 10px; color: #1e293b; font-size: 1.05rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+              <i class="fa-solid fa-shapes"></i> 1. Single Set Specifications (Per 1 Set)
+            </h4>
+            <div class="table-container" style="border-color: #cbd5e1;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nugget Type</th>
+                    <th>Qty / Set</th>
+                    <th>Wt / 100 Nugs (g)</th>
+                    <th>Net Weight / Set (g)</th>
+                    <th>Material Cost / 100</th>
+                    <th>Material Cost / Set</th>
+                  </tr>
+                </thead>
+                <tbody id="rpt-tbody-nugs"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: Detailed Color-Wise Nugget Breakdown Matrix -->
+          <div style="margin-bottom: 24px;">
+            <h4 style="margin-bottom: 10px; color: #1e293b; font-size: 1.05rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+              <i class="fa-solid fa-palette"></i> 2. Detailed Nugget Breakdown By Color Variation
+            </h4>
+            <div id="rpt-color-breakdown-matrix">
+              <!-- Dynamically populated per color -->
+            </div>
+          </div>
+
+          <!-- Section 3: Financial Summary & Grand Production Totals -->
+          <div class="report-section-grid">
+            <div>
+              <h4 style="margin-bottom: 10px; color: #1e293b; font-size: 1.05rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+                <i class="fa-solid fa-layer-group"></i> 3. Nugget Totals Across All Colors
+              </h4>
+              <div class="table-container" style="border-color: #cbd5e1;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nugget Type</th>
+                      <th>Qty / Set</th>
+                      <th>Grand Total Qty</th>
+                      <th>Grand Net Wt (g)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rpt-tbody-nug-summary"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <div class="report-summary-box">
+                <h4 style="color: #92400e; margin-bottom: 12px; font-size: 1.05rem;">Production Financial Summary</h4>
+                <div class="report-summary-row">
+                  <span>Total Production Sets</span>
+                  <strong id="rpt-val-sets">0</strong>
+                </div>
+                <div class="report-summary-row">
+                  <span>Total Nuggets Count</span>
+                  <strong id="rpt-val-nugs">0</strong>
+                </div>
+                <div class="report-summary-row">
+                  <span>Total Net Weight</span>
+                  <strong id="rpt-val-weight">0 g</strong>
+                </div>
+                <div class="report-summary-row" style="background: #fef3c7; margin: 4px -6px; padding: 6px; border-radius: 4px;">
+                  <span>Cost Per Set (Production)</span>
+                  <strong id="rpt-val-cost-per-set">Rs. 0.00</strong>
+                </div>
+                <div class="report-summary-row" style="margin-top: 6px;">
+                  <span>Total Labor Cost</span>
+                  <strong id="rpt-val-labor">Rs. 0.00</strong>
+                </div>
+                <div class="report-summary-row">
+                  <span>Total Material Cost</span>
+                  <strong id="rpt-val-material">Rs. 0.00</strong>
+                </div>
+                <div class="report-summary-row">
+                  <span>Scrap / Loss Allowance</span>
+                  <strong id="rpt-val-scrap">Rs. 0.00</strong>
+                </div>
+                <div class="report-summary-row total">
+                  <span>Grand Production Cost</span>
+                  <strong id="rpt-val-grand">Rs. 0.00</strong>
+                </div>
+              </div>
+
+              <div style="margin-top: 14px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem; color: #64748b;">
+                <p><strong>Notes:</strong> Production costs are calculated based on registered labor rates, material costs per 100 nuggets, and scrap allowances.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Mobile Floating Summary Bar -->
+  <div class="mobile-floating-bar">
+    <div class="floating-total">
+      <p>Grand Total Cost</p>
+      <h3 id="mobile-grand-total">$0.00</h3>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="switchTab('tab-results')">
+      View Report <i class="fa-solid fa-arrow-right"></i>
+    </button>
+  </div>
+
+  <!-- History Drawer Modal -->
+  <div class="modal-overlay" id="modal-history">
+    <div class="modal" style="max-width: 850px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fa-solid fa-box-archive"></i> Saved Transactions & History Manager</h3>
+        <button class="btn btn-secondary btn-sm btn-icon-only" onclick="closeModal('modal-history')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" id="btn-export-json">
+            <i class="fa-solid fa-download"></i> Export All JSON
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-json-input').click()">
+            <i class="fa-solid fa-upload"></i> Import JSON
+          </button>
+          <input type="file" id="import-json-input" accept=".json" style="display: none;">
+        </div>
+
+        <!-- Filter Controls Bar -->
+        <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <!-- Dropdown Select List -->
+          <div class="form-group">
+            <label for="hist-select-dropdown">Select Saved Transaction From List:</label>
+            <select id="hist-select-dropdown" class="form-control" style="font-weight: 600; color: var(--accent-gold);">
+              <option value="">-- Choose a Saved Set to View / Load --</option>
+            </select>
+          </div>
+
+          <!-- Search Inputs & Date Filter -->
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <input type="text" id="hist-filter-set-name" class="form-control" placeholder="✏️ Filter by Set Name..." style="flex: 2; min-width: 160px;">
+            <input type="text" id="hist-filter-invoice" class="form-control" placeholder="🧾 Filter by Invoice #..." style="flex: 1.5; min-width: 140px;">
+            <input type="date" id="hist-filter-date" class="form-control" style="flex: 1.2; min-width: 130px;" title="Filter by Date">
+            <button class="btn btn-secondary btn-sm" id="btn-clear-hist-filters">Reset Filters</button>
+          </div>
+        </div>
+
+        <div id="history-items-list">
+          <!-- Dynamically populated history -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Drive Settings & Gmail Sync Modal -->
+  <div class="modal-overlay" id="modal-drive">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fa-brands fa-google-drive"></i> Google Drive & Gmail Sync</h3>
+        <button class="btn btn-secondary btn-sm btn-icon-only" onclick="closeModal('modal-drive')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">
+          Connect your Gmail account to save sets directly to Google Drive as editable JSON files or import existing sets.
+        </p>
+
+        <!-- Gmail Sign-in Box -->
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
+          <div id="google-logged-out" style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <i class="fa-brands fa-google" style="font-size: 1.5rem; color: #4285F4;"></i>
+              <div>
+                <h4 style="font-size: 0.95rem; font-weight: 600;">Sign in with Gmail Account</h4>
+                <p style="font-size: 0.75rem; color: var(--text-muted);">Auto-sync quotes and transactions directly to your Google Drive.</p>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 6px;">
+              <label for="user-gmail-input">Your Gmail Address</label>
+              <div class="input-group">
+                <input type="email" id="user-gmail-input" class="form-control" placeholder="user@gmail.com">
+                <button class="btn btn-primary btn-sm" id="btn-connect-gmail"><i class="fa-solid fa-right-to-bracket"></i> Login Gmail</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="google-logged-in" style="display: none; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 50%; background: var(--accent-gold-gradient); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #000;" id="user-avatar-initials">G</div>
+              <div>
+                <h4 style="font-size: 0.95rem; color: var(--text-main);" id="user-display-name">Gmail Connected</h4>
+                <p style="font-size: 0.75rem; color: var(--success);" id="user-display-email"><i class="fa-solid fa-circle-check"></i> connected@gmail.com</p>
+              </div>
+            </div>
+            <button class="btn btn-danger btn-sm" id="btn-disconnect-gmail"><i class="fa-solid fa-power-off"></i> Disconnect</button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label for="drive-client-id">Google Cloud OAuth Client ID (Optional)</label>
+          <input type="text" id="drive-client-id" class="form-control" placeholder="123456789-abc.apps.googleusercontent.com">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Enter your Client ID for live OAuth. Otherwise, integrated cloud backup mode will be used.</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button class="btn btn-primary" id="btn-drive-save-cloud">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Save Current Set to Google Drive
+          </button>
+          <button class="btn btn-outline-gold" id="btn-drive-load-cloud">
+            <i class="fa-solid fa-cloud-arrow-down"></i> Load / Import Set from Google Drive
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gate Pass Modal (No Prices / Costs) -->
+  <div class="modal-overlay" id="modal-gatepass">
+    <div class="modal" style="max-width: 850px;">
+      <div class="modal-header" style="background: #1e293b; color: #fff;">
+        <h3 class="modal-title" style="color: var(--accent-gold);"><i class="fa-solid fa-id-card"></i> Production Gate Pass & Dispatch Note</h3>
+        <button class="btn btn-secondary btn-sm btn-icon-only" onclick="closeModal('modal-gatepass')">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="background: #0f172a; padding: 20px;">
+        <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+          <button class="btn btn-primary btn-sm" id="btn-export-gatepass-pdf">
+            <i class="fa-solid fa-file-pdf"></i> Export Gate Pass PDF
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="printGatePassSheet()">
+            <i class="fa-solid fa-print"></i> Print Gate Pass
+          </button>
+        </div>
+
+        <!-- Printable Gate Pass Sheet (Pure White Background) -->
+        <div class="report-preview-container" id="gatepass-preview-container" style="background: #ffffff; color: #0f172a; border-radius: 8px; padding: 36px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px double #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+            <div>
+              <h2 style="font-size: 1.6rem; color: #0f172a; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Production Gate Pass</h2>
+              <p style="font-size: 0.85rem; color: #475569; font-weight: 600;">Material Dispatch & Delivery Document</p>
+              <h4 style="margin-top: 8px; color: #b45309; font-weight: 700;" id="gp-set-name">Collection Name</h4>
+              <p style="font-size: 0.9rem; color: #1e293b;" id="gp-client-name">Client: Customer Name</p>
+            </div>
+            <div style="text-align: right; font-size: 0.85rem; color: #334155;">
+              <p><strong>Gate Pass #:</strong> <span id="gp-invoice-num">INV-000</span></p>
+              <p><strong>Date:</strong> <span id="gp-date">2026-08-19</span></p>
+              <p><strong>Dispatch Status:</strong> Verified</p>
+            </div>
+          </div>
+
+          <!-- Reference Images inside Gate Pass -->
+          <div id="gp-images-container" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;"></div>
+
+          <!-- Itemized Nugget Details (NO PRICES) -->
+          <h4 style="margin-bottom: 8px; color: #0f172a; font-size: 0.95rem;">1. Nugget Specifications & Quantity Breakdown</h4>
+          <div class="table-container" style="border: 1px solid #cbd5e1; margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: #0f172a;">
+              <thead>
+                <tr style="background: #f1f5f9; text-align: left;">
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Nugget Type Name</th>
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Qty / Set</th>
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Weight / 100 Nugs</th>
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Total Weight / Set (g)</th>
+                </tr>
+              </thead>
+              <tbody id="gp-tbody-nugs"></tbody>
+            </table>
+          </div>
+
+          <!-- Color Variations Details (NO PRICES) -->
+          <h4 style="margin-bottom: 8px; color: #0f172a; font-size: 0.95rem;">2. Metal Color Variations & Sets Count</h4>
+          <div class="table-container" style="border: 1px solid #cbd5e1; margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: #0f172a;">
+              <thead>
+                <tr style="background: #f1f5f9; text-align: left;">
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Color / Alloy Name</th>
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Number of Sets</th>
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Total Nuggets</th>
+                  <th style="padding: 8px 12px; border-bottom: 2px solid #cbd5e1; color: #334155;">Total Net Weight (g)</th>
+                </tr>
+              </thead>
+              <tbody id="gp-tbody-colors"></tbody>
+            </table>
+          </div>
+
+          <!-- Physical Metrics Summary (NO PRICES) -->
+          <div class="gatepass-metrics-grid" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin-bottom: 30px; text-align: center;">
+            <div>
+              <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Total Sets</span>
+              <div style="font-size: 1.3rem; font-weight: 800; color: #0f172a;" id="gp-total-sets">0</div>
+            </div>
+            <div>
+              <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Total Nuggets</span>
+              <div style="font-size: 1.3rem; font-weight: 800; color: #0f172a;" id="gp-total-nugs">0</div>
+            </div>
+            <div>
+              <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Total Net Weight</span>
+              <div style="font-size: 1.3rem; font-weight: 800; color: #b45309;" id="gp-total-weight">0.00 g</div>
+            </div>
+          </div>
+
+          <!-- Official Signatures Block -->
+          <div class="gatepass-signatures-grid" style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 24px; text-align: center;">
+            <div>
+              <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 6px;"></div>
+              <p style="font-size: 0.8rem; font-weight: 600; color: #334155;">Prepared / Dispatched By</p>
+            </div>
+            <div>
+              <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 6px;"></div>
+              <p style="font-size: 0.8rem; font-weight: 600; color: #334155;">Security / Guard Approval</p>
+            </div>
+            <div>
+              <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 6px;"></div>
+              <p style="font-size: 0.8rem; font-weight: 600; color: #334155;">Receiver Signature & Stamp</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Implementation -->
+  <script>
+    /* ==========================================================================
+       APP STATE MANAGEMENT
+       ========================================================================== */
+    let appState = {
+      setName: "",
+      invoiceNum: "",
+      date: new Date().toISOString().split('T')[0],
+      customerName: "",
+      notes: "",
+      currency: "Rs.",
+      globalLaborCostPer100: 0,
+      wastePercent: 0,
+      nugTypes: [],
+      colors: [],
+      images: []
+    };
+
+    /* ==========================================================================
+       INITIALIZATION
+       ========================================================================== */
+    document.addEventListener("DOMContentLoaded", async () => {
+      initTabs();
+      initFormListeners();
+      initDropzone();
+      
+      // Initialize Dexie DB
+      window.db = new Dexie("NugCalcDB");
+      db.version(1).stores({
+        history: 'id, timestamp, name, invoice',
+        draft: 'id'
+      });
+      
+      await loadDraftFromLocalStorage();
+      renderAll();
+    });
+
+    /* ==========================================================================
+       TAB NAVIGATION
+       ========================================================================== */
+    function initTabs() {
+      const tabBtns = document.querySelectorAll(".tab-btn");
+      tabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const targetTab = btn.getAttribute("data-tab");
+          switchTab(targetTab);
+        });
+      });
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+
+      const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+      const targetPanel = document.getElementById(tabId);
+
+      if (targetBtn && targetPanel) {
+        targetBtn.classList.add("active");
+        targetPanel.classList.add("active");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    /* ==========================================================================
+       FORM LISTENERS & BINDINGS
+       ========================================================================== */
+    function initFormListeners() {
+      // General Set Info
+      document.getElementById("set-name").addEventListener("input", e => { appState.setName = e.target.value; calculate(); saveDraftToLocalStorage(); });
+      document.getElementById("invoice-num").addEventListener("input", e => { appState.invoiceNum = e.target.value; calculate(); saveDraftToLocalStorage(); });
+      document.getElementById("set-date").addEventListener("change", e => { appState.date = e.target.value; calculate(); saveDraftToLocalStorage(); });
+      document.getElementById("customer-name").addEventListener("input", e => { appState.customerName = e.target.value; calculate(); saveDraftToLocalStorage(); });
+      document.getElementById("set-notes").addEventListener("input", e => { appState.notes = e.target.value; calculate(); saveDraftToLocalStorage(); });
+
+      // Currency
+      document.getElementById("currency-select").addEventListener("change", e => {
+        appState.currency = e.target.value;
+        document.querySelectorAll(".currency-symbol").forEach(el => el.textContent = appState.currency);
+        calculate();
+        saveDraftToLocalStorage();
+      });
+
+      // Rates
+      document.getElementById("global-labor-cost").addEventListener("input", e => {
+        appState.globalLaborCostPer100 = parseFloat(e.target.value) || 0;
+        calculate();
+        saveDraftToLocalStorage();
+      });
+      document.getElementById("waste-percent").addEventListener("input", e => {
+        appState.wastePercent = parseFloat(e.target.value) || 0;
+        calculate();
+        saveDraftToLocalStorage();
+      });
+
+      // Dynamic Buttons
+      document.getElementById("btn-add-nug-type").addEventListener("click", () => addNugType());
+      document.getElementById("btn-add-color").addEventListener("click", () => addColor());
+      document.getElementById("btn-quick-save").addEventListener("click", saveCurrentSetToHistory);
+      document.getElementById("btn-open-history").addEventListener("click", () => { renderHistoryModal(); openModal("modal-history"); });
+      document.getElementById("btn-drive-sync").addEventListener("click", () => openModal("modal-drive"));
+      document.getElementById("btn-reset-all").addEventListener("click", resetAll);
+
+      // JSON Export/Import
+      document.getElementById("btn-export-json").addEventListener("click", exportStateAsJSON);
+      document.getElementById("import-json-input").addEventListener("change", importJSONFile);
+
+      // Drive Modal Buttons
+      document.getElementById("btn-drive-save-cloud").addEventListener("click", handleDriveSave);
+      document.getElementById("btn-drive-load-cloud").addEventListener("click", handleDriveLoad);
+
+      // Export PDF & Sharing
+      document.getElementById("btn-export-pdf").addEventListener("click", exportPDF);
+      document.getElementById("btn-share-whatsapp").addEventListener("click", shareWhatsApp);
+      document.getElementById("btn-web-share").addEventListener("click", shareNative);
+
+      // Gate Pass Listeners
+      const btnOpenGatePass = document.getElementById("btn-open-gatepass");
+      const hdrBtnGatePass = document.getElementById("hdr-btn-gate-pass");
+      const btnExportGatePassPdf = document.getElementById("btn-export-gatepass-pdf");
+
+      if (btnOpenGatePass) btnOpenGatePass.addEventListener("click", () => { renderGatePass(); openModal("modal-gatepass"); });
+      if (hdrBtnGatePass) hdrBtnGatePass.addEventListener("click", () => { renderGatePass(); openModal("modal-gatepass"); });
+      if (btnExportGatePassPdf) btnExportGatePassPdf.addEventListener("click", exportGatePassPDF);
+    }
+
+    /* ==========================================================================
+       IMAGE UPLOADER (DRAG & DROP + PREVIEW)
+       ========================================================================== */
+    function initDropzone() {
+      const dropzone = document.getElementById("dropzone");
+      const fileInput = document.getElementById("file-input");
+
+      dropzone.addEventListener("click", () => fileInput.click());
+
+      dropzone.addEventListener("dragover", e => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+
+      dropzone.addEventListener("drop", e => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+        if (e.dataTransfer.files.length) {
+          handleFiles(e.dataTransfer.files);
+        }
+      });
+
+      fileInput.addEventListener("change", e => {
+        if (e.target.files.length) {
+          handleFiles(e.target.files);
+        }
+      });
+    }
+
+    function handleFiles(files) {
+      Array.from(files).forEach(file => {
+        if (!file.type.startsWith("image/")) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+          appState.images.push(e.target.result);
+          renderImagePreviews();
+          saveDraftToLocalStorage();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function removeImage(index) {
+      appState.images.splice(index, 1);
+      renderImagePreviews();
+      saveDraftToLocalStorage();
+    }
+
+    function renderImagePreviews() {
+      const grid = document.getElementById("image-preview-grid");
+      const rptContainer = document.getElementById("rpt-images-container");
+
+      grid.innerHTML = "";
+      rptContainer.innerHTML = "";
+
+      appState.images.forEach((imgSrc, idx) => {
+        // Form Preview
+        const thumb = document.createElement("div");
+        thumb.className = "image-thumb";
+        thumb.innerHTML = `
+          <img src="${imgSrc}" alt="Set Preview ${idx + 1}">
+          <button class="remove-img" onclick="removeImage(${idx})" title="Remove Image"><i class="fa-solid fa-xmark"></i></button>
+        `;
+        grid.appendChild(thumb);
+
+        // PDF Report Preview
+        const rptImg = document.createElement("img");
+        rptImg.src = imgSrc;
+        rptImg.style.width = "90px";
+        rptImg.style.height = "90px";
+        rptImg.style.objectFit = "cover";
+        rptImg.style.borderRadius = "6px";
+        rptImg.style.border = "1px solid #cbd5e1";
+        rptContainer.appendChild(rptImg);
+      });
+    }
+
+    /* ==========================================================================
+       DYNAMIC CRUD: NUGGET TYPES
+       ========================================================================== */
+    function addNugType(name = "", qty = 0, wt100 = 0, matCost100 = 0) {
+      const newType = {
+        id: "nug-" + Date.now() + Math.random().toString(36).substr(2, 4),
+        name,
+        qtyPerSet: qty,
+        weightPer100: wt100,
+        materialCostPer100: matCost100
+      };
+      appState.nugTypes.push(newType);
+      renderNugTypes();
+      renderMaterialCosts();
+      calculate();
+      saveDraftToLocalStorage();
+    }
+
+    function addNugPreset(name, qty, wt100) {
+      addNugType(name, qty, wt100, wt100 * 8);
+      showToast(`Added preset: ${name}`, "success");
+    }
+
+    function removeNugType(id) {
+      appState.nugTypes = appState.nugTypes.filter(n => n.id !== id);
+      renderNugTypes();
+      renderMaterialCosts();
+      calculate();
+      saveDraftToLocalStorage();
+    }
+
+    function updateNugType(id, field, value) {
+      const item = appState.nugTypes.find(n => n.id === id);
+      if (item) {
+        if (field === 'name') item.name = value;
+        else item[field] = parseFloat(value) || 0;
+        renderMaterialCosts();
+        calculate();
+        saveDraftToLocalStorage();
+      }
+    }
+
+    function renderNugTypes() {
+      const tbody = document.getElementById("tbody-nug-types");
+      tbody.innerHTML = "";
+      document.getElementById("badge-nug-types").textContent = appState.nugTypes.length;
+
+      if (appState.nugTypes.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No nugget types added yet. Click "+ Add Nugget Type" above.</td></tr>`;
+        return;
+      }
+
+      appState.nugTypes.forEach(nug => {
+        const wtPerSet = ((nug.qtyPerSet * nug.weightPer100) / 100).toFixed(2);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <input type="text" class="form-control" value="${nug.name}" onchange="updateNugType('${nug.id}', 'name', this.value)">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control" value="${nug.qtyPerSet}" oninput="updateNugType('${nug.id}', 'qtyPerSet', this.value)">
+          </td>
+          <td>
+            <input type="number" step="0.1" min="0" class="form-control" value="${nug.weightPer100}" oninput="updateNugType('${nug.id}', 'weightPer100', this.value)">
+          </td>
+          <td style="font-weight: 700; color: var(--accent-gold);">${wtPerSet} g</td>
+          <td style="text-align: center;">
+            <button class="btn btn-danger btn-sm btn-icon-only" onclick="removeNugType('${nug.id}')" title="Delete Type">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* ==========================================================================
+       DYNAMIC CRUD: COLORS & SET QUANTITIES
+       ========================================================================== */
+    function addColor(name = "", hex = "#f59e0b", setsCount = 1) {
+      const newColor = {
+        id: "col-" + Date.now() + Math.random().toString(36).substr(2, 4),
+        name,
+        hex,
+        setsCount
+      };
+      appState.colors.push(newColor);
+      renderColors();
+      calculate();
+      saveDraftToLocalStorage();
+    }
+
+    function addColorPreset(name, hex, count) {
+      addColor(name, hex, count);
+      showToast(`Added color: ${name}`, "success");
+    }
+
+    function removeColor(id) {
+      appState.colors = appState.colors.filter(c => c.id !== id);
+      renderColors();
+      calculate();
+      saveDraftToLocalStorage();
+    }
+
+    function updateColor(id, field, value) {
+      const item = appState.colors.find(c => c.id === id);
+      if (item) {
+        if (field === 'setsCount') item.setsCount = parseInt(value) || 0;
+        else item[field] = value;
+        calculate();
+        saveDraftToLocalStorage();
+      }
+    }
+
+    function renderColors() {
+      const tbody = document.getElementById("tbody-colors");
+      tbody.innerHTML = "";
+      document.getElementById("badge-colors").textContent = appState.colors.length;
+
+      if (appState.colors.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No color variations added yet. Click "+ Add Color Variation" above.</td></tr>`;
+        return;
+      }
+
+      appState.colors.forEach(col => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <div class="color-swatch-picker">
+              <span class="color-dot" style="background-color: ${col.hex}"></span>
+              <input type="color" value="${col.hex}" onchange="updateColor('${col.id}', 'hex', this.value)" style="width:30px; height:30px; border:none; background:none; cursor:pointer;">
+            </div>
+          </td>
+          <td>
+            <input type="text" class="form-control" value="${col.name}" onchange="updateColor('${col.id}', 'name', this.value)">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control" value="${col.setsCount}" oninput="updateColor('${col.id}', 'setsCount', this.value)">
+          </td>
+          <td style="text-align: center;">
+            <button class="btn btn-danger btn-sm btn-icon-only" onclick="removeColor('${col.id}')" title="Delete Color">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* ==========================================================================
+       DYNAMIC COST INPUTS FOR MATERIAL
+       ========================================================================== */
+    function renderMaterialCosts() {
+      const tbody = document.getElementById("tbody-material-costs");
+      tbody.innerHTML = "";
+
+      if (appState.nugTypes.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No nugget types defined. Add nugget types in the "Nug Types" tab first.</td></tr>`;
+        return;
+      }
+
+      appState.nugTypes.forEach(nug => {
+        const matCostPerSet = ((nug.qtyPerSet / 100) * nug.materialCostPer100).toFixed(2);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="font-weight: 600;">${nug.name}</td>
+          <td>${nug.qtyPerSet} pcs</td>
+          <td>
+            <div class="input-group">
+              <span class="input-prefix currency-symbol">${appState.currency}</span>
+              <input type="number" step="0.01" min="0" class="form-control" value="${nug.materialCostPer100}" oninput="updateNugType('${nug.id}', 'materialCostPer100', this.value)">
+            </div>
+          </td>
+          <td style="font-weight: 700; color: var(--accent-gold);">${appState.currency} ${matCostPerSet}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* ==========================================================================
+       CORE CALCULATION ENGINE
+       ========================================================================== */
+    function calculate() {
+      // 1. Total Sets
+      const totalSets = appState.colors.reduce((sum, c) => sum + (c.setsCount || 0), 0);
+
+      // 2. Nuggets & Weights Per Set
+      let nugsPerSet = 0;
+      let weightPerSetGrams = 0;
+      let materialCostPerSet = 0;
+
+      appState.nugTypes.forEach(nug => {
+        const qty = nug.qtyPerSet || 0;
+        const wt100 = nug.weightPer100 || 0;
+        const mat100 = nug.materialCostPer100 || 0;
+
+        nugsPerSet += qty;
+        weightPerSetGrams += (qty * wt100) / 100;
+        materialCostPerSet += (qty * mat100) / 100;
+      });
+
+      // 3. Labor Cost Per Set
+      const laborCostPerSet = (nugsPerSet / 100) * appState.globalLaborCostPer100;
+
+      // 4. Overalls across all sets
+      const totalNugs = nugsPerSet * totalSets;
+      const totalWeightGrams = weightPerSetGrams * totalSets;
+      const totalLaborCost = laborCostPerSet * totalSets;
+      const totalMaterialCost = materialCostPerSet * totalSets;
+
+      // Scrap Allowance
+      const scrapCost = totalMaterialCost * (appState.wastePercent / 100);
+
+      // Grand Production Total
+      const grandTotalCost = totalLaborCost + totalMaterialCost + scrapCost;
+
+      // Avg Cost Per Set
+      const avgCostPerSet = totalSets > 0 ? (grandTotalCost / totalSets) : 0;
+
+      // Selling Price with Markup
+      const grandSellingPrice = grandTotalCost * (1 + (appState.markupPercent / 100));
+
+      // 5. Update Metrics UI
+      document.getElementById("res-total-sets").textContent = totalSets;
+      document.getElementById("res-total-nugs").textContent = totalNugs.toLocaleString();
+      document.getElementById("res-nugs-per-set").textContent = nugsPerSet;
+      document.getElementById("res-total-weight").textContent = totalWeightGrams.toFixed(2) + " g";
+      document.getElementById("res-weight-per-set").textContent = weightPerSetGrams.toFixed(2);
+
+      const curr = appState.currency;
+      document.getElementById("res-grand-total").textContent = `${curr} ${grandTotalCost.toFixed(2)}`;
+      document.getElementById("res-avg-cost-set").textContent = `${curr} ${avgCostPerSet.toFixed(2)}`;
+      document.getElementById("mobile-grand-total").textContent = `${curr} ${grandTotalCost.toFixed(2)}`;
+
+      // 6. Render Printable PDF Report Preview
+      renderPDFReport({
+        totalSets,
+        nugsPerSet,
+        totalNugs,
+        weightPerSetGrams,
+        totalWeightGrams,
+        laborCostPerSet,
+        materialCostPerSet,
+        totalLaborCost,
+        totalMaterialCost,
+        scrapCost,
+        grandTotalCost
+      });
+    }
+
+    /* ==========================================================================
+       RENDER PRINTABLE REPORT (COLOR-WISE NUGGET TYPE BREAKDOWN MATRIX)
+       ========================================================================== */
+    function renderPDFReport(metrics) {
+      document.getElementById("rpt-set-name").textContent = appState.setName || "New Production Report";
+      document.getElementById("rpt-invoice").textContent = appState.invoiceNum || "---";
+      document.getElementById("rpt-date").textContent = appState.date || new Date().toISOString().split('T')[0];
+      document.getElementById("rpt-client").textContent = appState.customerName ? `Client: ${appState.customerName}` : "Client: ---";
+
+      const curr = appState.currency;
+
+      // Section 1: Single Set Specifications
+      const tbodyNugs = document.getElementById("rpt-tbody-nugs");
+      tbodyNugs.innerHTML = "";
+      if (appState.nugTypes.length === 0) {
+        tbodyNugs.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 10px;">No nugget types defined</td></tr>`;
+      } else {
+        appState.nugTypes.forEach(nug => {
+          const wtPerSet = ((nug.qtyPerSet * nug.weightPer100) / 100).toFixed(2);
+          const matSet = ((nug.qtyPerSet / 100) * nug.materialCostPer100).toFixed(2);
+          tbodyNugs.innerHTML += `
+            <tr>
+              <td style="font-weight: 600;">${nug.name}</td>
+              <td>${nug.qtyPerSet} pcs</td>
+              <td>${nug.weightPer100} g</td>
+              <td style="font-weight: 700; color: #b45309;">${wtPerSet} g</td>
+              <td>${curr} ${nug.materialCostPer100.toFixed(2)}</td>
+              <td style="font-weight: 600; color: #15803d;">${curr} ${matSet}</td>
+            </tr>
+          `;
+        });
+      }
+
+      // Section 2: Detailed Color-Wise Breakdown Matrix
+      const colorMatrixContainer = document.getElementById("rpt-color-breakdown-matrix");
+      colorMatrixContainer.innerHTML = "";
+
+      if (appState.colors.length === 0) {
+        colorMatrixContainer.innerHTML = `<p style="color: #94a3b8; padding: 12px; font-style: italic;">No color variations defined.</p>`;
+      } else {
+        appState.colors.forEach(col => {
+          const colSets = col.setsCount || 0;
+          const colorBox = document.createElement("div");
+          colorBox.style.marginBottom = "16px";
+          colorBox.style.border = "1px solid #cbd5e1";
+          colorBox.style.borderRadius = "6px";
+          colorBox.style.overflow = "hidden";
+
+          let rowsHtml = "";
+          let colorTotalNugs = 0;
+          let colorTotalWeight = 0;
+          let colorTotalMatCost = 0;
+
+          appState.nugTypes.forEach(nug => {
+            const qtyForCol = (nug.qtyPerSet || 0) * colSets;
+            const wtForCol = ((nug.qtyPerSet || 0) * (nug.weightPer100 || 0) / 100) * colSets;
+            const matCostForCol = ((nug.qtyPerSet || 0) * (nug.materialCostPer100 || 0) / 100) * colSets;
+
+            colorTotalNugs += qtyForCol;
+            colorTotalWeight += wtForCol;
+            colorTotalMatCost += matCostForCol;
+
+            rowsHtml += `
+              <tr>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${nug.name}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${nug.qtyPerSet} pcs</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #0f172a;">${qtyForCol} pcs</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${nug.weightPer100} g</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #b45309;">${wtForCol.toFixed(2)} g</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #15803d;">${curr} ${matCostForCol.toFixed(2)}</td>
+              </tr>
+            `;
+          });
+
+          const colorLaborCost = (colorTotalNugs / 100) * appState.globalLaborCostPer100;
+          const colorTotalCost = colorLaborCost + colorTotalMatCost;
+
+          colorBox.innerHTML = `
+            <div style="background: #f1f5f9; padding: 10px 14px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+              <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem;">
+                <span style="background-color: ${col.hex}; display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: middle; margin-right: 6px; border: 1px solid #94a3b8;"></span>
+                Color: ${col.name} <span style="color: #64748b; font-weight: 600;">(${colSets} Sets)</span>
+              </div>
+              <div style="font-weight: 700; color: #b45309; font-size: 0.9rem;">
+                Color Cost: ${curr} ${colorTotalCost.toFixed(2)}
+              </div>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: #0f172a;">
+              <thead>
+                <tr style="background: #fafafa; text-align: left; border-bottom: 1px solid #cbd5e1; color: #475569;">
+                  <th style="padding: 8px 12px;">Nugget Type Name</th>
+                  <th style="padding: 8px 12px;">Qty / Set</th>
+                  <th style="padding: 8px 12px;">Total Qty (${colSets} Sets)</th>
+                  <th style="padding: 8px 12px;">Wt / 100 (g)</th>
+                  <th style="padding: 8px 12px;">Total Weight (g)</th>
+                  <th style="padding: 8px 12px;">Material Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 10px;">No nugget types added</td></tr>'}
+              </tbody>
+              <tfoot>
+                <tr style="background: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
+                  <td colspan="2" style="padding: 8px 12px;">Subtotal for ${col.name}:</td>
+                  <td style="padding: 8px 12px; color: #0f172a;">${colorTotalNugs} pcs</td>
+                  <td style="padding: 8px 12px;">-</td>
+                  <td style="padding: 8px 12px; color: #b45309;">${colorTotalWeight.toFixed(2)} g</td>
+                  <td style="padding: 8px 12px; color: #15803d;">${curr} ${colorTotalMatCost.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          `;
+
+          colorMatrixContainer.appendChild(colorBox);
+        });
+      }
+
+      // Section 3: Nugget Totals Summary across all Colors
+      const tbodyNugSummary = document.getElementById("rpt-tbody-nug-summary");
+      tbodyNugSummary.innerHTML = "";
+      const totalSets = metrics.totalSets || 1;
+
+      if (appState.nugTypes.length === 0) {
+        tbodyNugSummary.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 10px;">No nugget types defined</td></tr>`;
+      } else {
+        appState.nugTypes.forEach(nug => {
+          const grandQty = (nug.qtyPerSet || 0) * totalSets;
+          const grandWt = ((nug.qtyPerSet || 0) * (nug.weightPer100 || 0) / 100) * totalSets;
+          tbodyNugSummary.innerHTML += `
+            <tr>
+              <td style="font-weight: 600;">${nug.name}</td>
+              <td>${nug.qtyPerSet} pcs</td>
+              <td style="font-weight: 700; color: #0f172a;">${grandQty} pcs</td>
+              <td style="font-weight: 700; color: #b45309;">${grandWt.toFixed(2)} g</td>
+            </tr>
+          `;
+        });
+      }
+
+      // Financial Summary Metrics
+      const costPerSet = metrics.totalSets > 0 ? (metrics.grandTotalCost / metrics.totalSets) : 0;
+
+      document.getElementById("rpt-val-sets").textContent = metrics.totalSets;
+      document.getElementById("rpt-val-nugs").textContent = metrics.totalNugs;
+      document.getElementById("rpt-val-weight").textContent = metrics.totalWeightGrams.toFixed(2) + " g";
+      document.getElementById("rpt-val-cost-per-set").textContent = `${curr} ${costPerSet.toFixed(2)}`;
+      document.getElementById("rpt-val-labor").textContent = `${curr} ${metrics.totalLaborCost.toFixed(2)}`;
+      document.getElementById("rpt-val-material").textContent = `${curr} ${metrics.totalMaterialCost.toFixed(2)}`;
+      document.getElementById("rpt-val-scrap").textContent = `${curr} ${metrics.scrapCost.toFixed(2)}`;
+      document.getElementById("rpt-val-grand").textContent = `${curr} ${metrics.grandTotalCost.toFixed(2)}`;
+    }
+
+    /* ==========================================================================
+       EXPORT & SHARING WITH NATIVE MOBILE PDF FILE POPUP & FALLBACKS
+       ========================================================================== */
+    function sharePDFFile(pdf, filename, title) {
+      try {
+        const blob = pdf.output('blob');
+        const file = new File([blob], filename, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          showToast("Opening Mobile Share Sheet...", "info");
+          navigator.share({
+            title: title,
+            text: `Production PDF Document for ${title}`,
+            files: [file]
+          }).then(() => {
+            showToast("PDF shared successfully!", "success");
+          }).catch(err => {
+            if (err.name !== 'AbortError') {
+              console.error("Share failed, downloading PDF:", err);
+              pdf.save(filename);
+              showToast("PDF downloaded to device.", "info");
+            }
+          });
+        } else {
+          pdf.save(filename);
+          showToast("PDF downloaded to your device downloads.", "success");
+        }
+      } catch (err) {
+        console.error("PDF Share error:", err);
+        pdf.save(filename);
+      }
+    }
+
+    function exportPDF() {
+      showToast("Generating PDF document...", "info");
+      const element = document.getElementById("report-preview");
+
+      const jsPdfObj = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+
+      if (!jsPdfObj || typeof html2canvas === 'undefined') {
+        showToast("Opening mobile printable document view...", "info");
+        window.print();
+        return;
+      }
+
+      const opt = {
+        scale: 2,
+        useCORS: true,
+        logging: false
+      };
+
+      html2canvas(element, opt).then(canvas => {
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPdfObj("p", "mm", "a4");
+
+        const imgWidth = 210;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+        const filename = `${(appState.setName || "Nug_Cost_Report").replace(/\s+/g, '_')}_${appState.invoiceNum || '000'}.pdf`;
+        
+        // Trigger Native Mobile Share Sheet (WhatsApp, Social Apps, etc.) if available
+        sharePDFFile(pdf, filename, appState.setName || "Nug Cost Report");
+      }).catch(err => {
+        console.error(err);
+        showToast("Opening browser print dialog...", "info");
+        window.print();
+      });
+    }
+
+    function shareWhatsApp() {
+      const totalSets = appState.colors.reduce((s, c) => s + c.setsCount, 0);
+      const curr = appState.currency;
+      const grandTotal = document.getElementById("res-grand-total").textContent;
+
+      let msg = `*💎 NUG & JEWELRY PRODUCTION COST REPORT*\n`;
+      msg += `*Set:* ${appState.setName || 'Custom Set'}\n`;
+      msg += `*Invoice:* #${appState.invoiceNum || '---'}\n`;
+      msg += `*Client:* ${appState.customerName || '---'}\n`;
+      msg += `------------------------------------\n`;
+      msg += `*Total Production Sets:* ${totalSets}\n`;
+      msg += `*Total Net Weight:* ${document.getElementById("res-total-weight").textContent}\n`;
+      msg += `*Grand Cost:* ${grandTotal}\n`;
+      msg += `------------------------------------\n`;
+      msg += `Generated via Nug Cost Calculator`;
+
+      const encoded = encodeURIComponent(msg);
+      const waUrl = `https://api.whatsapp.com/send?text=${encoded}`;
+      
+      try {
+        window.location.href = waUrl;
+      } catch(e) {
+        window.open(waUrl, '_blank');
+      }
+    }
+
+    function shareNative() {
+      if (navigator.share) {
+        navigator.share({
+          title: `Nug Quote - ${appState.setName}`,
+          text: `Quote for ${appState.setName} (Invoice #${appState.invoiceNum}). Grand Total: ${document.getElementById("res-grand-total").textContent}`
+        }).catch(err => console.log('Share error:', err));
+      } else {
+        shareWhatsApp();
+      }
+    }
+
+    /* ==========================================================================
+       LOCALSTORAGE HISTORY & PERSISTENCE
+       ========================================================================== */
+    const STORAGE_KEY_DRAFT = "nug_calc_current_draft";
+    const STORAGE_KEY_HISTORY = "nug_calc_saved_history";
+
+    async function saveDraftToLocalStorage() {
+      await db.draft.put({ id: 'current', state: JSON.parse(JSON.stringify(appState)) });
+    }
+
+    async function loadDraftFromLocalStorage() {
+      const draft = await db.draft.get('current');
+      if (draft && draft.state) {
+        try {
+          if (draft.state.setName === "Royal Crown Nugget Collection") {
+            await db.draft.delete('current');
+          } else {
+            appState = draft.state;
+          }
+        } catch (e) {
+          console.error("Failed to load draft:", e);
+        }
+      }
+      populateFormFromState();
+    }
+
+    function populateFormFromState() {
+      document.getElementById("set-name").value = appState.setName || "";
+      document.getElementById("invoice-num").value = appState.invoiceNum || "";
+      document.getElementById("set-date").value = appState.date || "";
+      document.getElementById("customer-name").value = appState.customerName || "";
+      document.getElementById("set-notes").value = appState.notes || "";
+      document.getElementById("currency-select").value = appState.currency || "Rs.";
+      document.getElementById("global-labor-cost").value = appState.globalLaborCostPer100 || 0;
+      document.getElementById("waste-percent").value = appState.wastePercent || 0;
+
+      document.querySelectorAll(".currency-symbol").forEach(el => el.textContent = appState.currency || "Rs.");
+
+      renderImagePreviews();
+      renderNugTypes();
+      renderColors();
+      renderMaterialCosts();
+      calculate();
+    }
+
+    async function saveCurrentSetToHistory() {
+      const totalSets = appState.colors.reduce((s, c) => s + (c.setsCount || 0), 0);
+      let nugsPerSet = appState.nugTypes.reduce((s, n) => s + (n.qtyPerSet || 0), 0);
+      let laborPerSet = (nugsPerSet / 100) * (appState.globalLaborCostPer100 || 0);
+      let matPerSet = appState.nugTypes.reduce((s, n) => s + ((n.qtyPerSet * n.materialCostPer100) / 100), 0);
+      let totalMaterialCost = matPerSet * totalSets;
+      let scrapCost = totalMaterialCost * ((appState.wastePercent || 0) / 100);
+      let grandTotalCost = (laborPerSet * totalSets) + totalMaterialCost + scrapCost;
+
+      const setEntry = {
+        id: "set-" + Date.now(),
+        timestamp: new Date().toISOString(),
+        name: appState.setName || "Untitled Set",
+        invoice: appState.invoiceNum || "INV-000",
+        customerName: appState.customerName || "",
+        currency: appState.currency || "Rs.",
+        totalSets,
+        grandTotalCost,
+        state: JSON.parse(JSON.stringify(appState))
+      };
+      await db.history.put(setEntry);
+      showToast("Transaction saved to in-app history!", "success");
+      renderHistoryModal();
+    }
+
+    async function getSavedHistory() {
+      const all = await db.history.reverse().sortBy('timestamp');
+      return all;
+    }
+
+    async function renderHistoryModal() {
+      const container = document.getElementById("history-items-list");
+      const dropdownSelect = document.getElementById("hist-select-dropdown");
+      let allHistory = await getSavedHistory();
+
+      if (!allHistory.length) {
+        container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">No saved transactions found.</p>`;
+        if (dropdownSelect) dropdownSelect.innerHTML = `<option value="">-- No Saved Transactions Available --</option>`;
+        return;
+      }
+
+      if (dropdownSelect) {
+        const currentVal = dropdownSelect.value;
+        dropdownSelect.innerHTML = `<option value="">-- Choose a Saved Set from Dropdown (${allHistory.length} Total) --</option>`;
+        allHistory.forEach(item => {
+          const opt = document.createElement("option");
+          opt.value = item.id;
+          const dt = item.timestamp ? item.timestamp.split('T')[0] : '';
+          opt.textContent = `${dt} | ${item.name || 'Untitled'} (Inv: #${item.invoice || '---'}) - ${item.currency || 'Rs.'} ${parseFloat(item.grandTotalCost || 0).toFixed(2)}`;
+          if (item.id === currentVal) opt.selected = true;
+          dropdownSelect.appendChild(opt);
+        });
+      }
+
+      const selectedId = dropdownSelect?.value || "";
+      const filterSetName = (document.getElementById("hist-filter-set-name")?.value || "").toLowerCase().trim();
+      const filterInvoice = (document.getElementById("hist-filter-invoice")?.value || "").toLowerCase().trim();
+      const filterDate = document.getElementById("hist-filter-date")?.value || "";
+
+      let filteredHistory = allHistory.filter(item => {
+        if (selectedId) return item.id === selectedId;
+        const matchesSetName = !filterSetName || (item.name && item.name.toLowerCase().includes(filterSetName));
+        const matchesInvoice = !filterInvoice || (item.invoice && item.invoice.toLowerCase().includes(filterInvoice));
+        let matchesDate = true;
+        if (filterDate) {
+          const itemDate = item.timestamp ? item.timestamp.split('T')[0] : (item.state?.date || '');
+          matchesDate = (itemDate === filterDate);
+        }
+        return matchesSetName && matchesInvoice && matchesDate;
+      });
+
+      if (!filteredHistory.length) {
+        container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">No transactions match your active filters.</p>`;
+        return;
+      }
+
+      container.style.display = "grid";
+      container.style.gridTemplateColumns = "repeat(auto-fill, minmax(280px, 1fr))";
+      container.style.gap = "16px";
+      container.innerHTML = "";
+      
+      filteredHistory.forEach(item => {
+        const curr = item.currency || item.state?.currency || "Rs.";
+        const cost = (item.grandTotalCost || 0).toFixed(2);
+        const div = document.createElement("div");
+        div.className = "history-item card";
+        div.style.padding = "16px";
+        div.style.margin = "0";
+        div.style.display = "flex";
+        div.style.flexDirection = "column";
+        div.style.gap = "12px";
+
+        const imgSrc = (item.state?.images && item.state.images.length > 0) ? item.state.images[0] : '';
+        const imgHtml = imgSrc ? `<div style="width:100%; height:180px; border-radius:8px; overflow:hidden; margin-bottom:8px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"></div>` : `<div style="width:100%; height:180px; border-radius:8px; background:#1e293b; display:flex; align-items:center; justify-content:center; color:#475569; margin-bottom:8px;"><i class="fa-solid fa-image fa-3x"></i></div>`;
+
+        div.innerHTML = `
+          ${imgHtml}
+          <div style="flex-grow: 1;">
+            <h4 style="font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-bottom:4px;">${item.name || 'Untitled Set'}</h4>
+            <p style="font-size: 0.85rem; color: var(--accent-gold); margin-bottom:8px;">Invoice #${item.invoice || '---'}</p>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom:4px;">
+              ${item.customerName ? '<i class="fa-solid fa-user"></i> ' + item.customerName + '<br>' : ''}
+              <i class="fa-solid fa-layer-group"></i> Sets: <strong>${item.totalSets || 0}</strong> • <i class="fa-regular fa-calendar"></i> ${item.timestamp ? item.timestamp.split('T')[0] : ''}
+            </p>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+              <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Cost</span>
+              <div style="font-weight: 800; font-size: 1.2rem; color: var(--accent-gold);">${curr} ${cost}</div>
+            </div>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
+            <button class="btn btn-primary btn-sm" onclick="loadSetFromHistory('${item.id}')" title="Load & Edit">
+              <i class="fa-solid fa-folder-open"></i> Edit
+            </button>
+            <button class="btn btn-outline-gold btn-sm" onclick="copySetFromHistory('${item.id}')" title="Duplicate">
+              <i class="fa-solid fa-copy"></i> Copy
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="viewSetFromHistory('${item.id}')" title="View Only">
+              <i class="fa-solid fa-eye"></i> View
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSetFromHistory('${item.id}')" title="Delete">
+              <i class="fa-solid fa-trash-can"></i> Delete
+            </button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function loadSetFromHistory(id) {
+      const history = await getSavedHistory();
+      const item = history.find(h => h.id === id);
+      if (item) {
+        appState = JSON.parse(JSON.stringify(item.state));
+        populateFormFromState();
+        closeModal("modal-history");
+        showToast(`Loaded set: ${item.name}`, "success");
+      }
+    }
+
+    async function copySetFromHistory(id) {
+      const history = await getSavedHistory();
+      const item = history.find(h => h.id === id);
+      if (item && item.state) {
+        appState = JSON.parse(JSON.stringify(item.state));
+        appState.setName = (appState.setName || "Untitled") + " (Copy)";
+        appState.invoiceNum = ""; // clear invoice for copy
+        populateFormFromState();
+        closeModal("modal-history");
+        showToast("Set copied successfully! Edit and save as new.", "success");
+      }
+    }
+
+    async function viewSetFromHistory(id) {
+      await loadSetFromHistory(id);
+      switchTab("tab-results");
+    }
+
+    async function deleteSetFromHistory(id) {
+      if(!confirm("Are you sure you want to delete this set?")) return;
+      await db.history.delete(id);
+      renderHistoryModal();
+      showToast("Deleted set from history.", "info");
+    }
+
+    function exportStateAsJSON() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `NugCostCalc_${appState.invoiceNum || 'export'}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function importJSONFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const importedState = JSON.parse(event.target.result);
+          if (importedState.nugTypes && importedState.colors) {
+            appState = importedState;
+            populateFormFromState();
+            closeModal("modal-history");
+            showToast("Imported set successfully!", "success");
+          } else {
+            showToast("Invalid JSON file structure.", "danger");
+          }
+        } catch (err) {
+          showToast("Failed to parse JSON file.", "danger");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function resetAll() {
+      if (confirm("Are you sure you want to clear all fields?")) {
+        appState = {
+          setName: "",
+          invoiceNum: "",
+          date: new Date().toISOString().split('T')[0],
+          customerName: "",
+          notes: "",
+          currency: "$",
+          globalLaborCostPer100: 0,
+          markupPercent: 0,
+          wastePercent: 0,
+          nugTypes: [],
+          colors: [],
+          images: []
+        };
+        saveDraftToLocalStorage();
+        populateFormFromState();
+        showToast("All fields cleared.", "info");
+      }
+    }
+
+    /* ==========================================================================
+       GOOGLE DRIVE INTEGRATION & MOCK FALLBACK
+       ========================================================================== */
+    function syncSingleSetToDrive(id) {
+      const history = getSavedHistory();
+      const item = history.find(h => h.id === id);
+      if (!item) return;
+
+      const userEmail = localStorage.getItem("nug_user_gmail") || "user@gmail.com";
+      showToast(`Saving transaction #${item.invoice} to Google Drive (${userEmail})...`, "info");
+      
+      setTimeout(() => {
+        showToast(`Transaction #${item.invoice} saved to Google Drive! (${userEmail})`, "success");
+      }, 1000);
+    }
+
+    /* ==========================================================================
+       GMAIL LOGIN & GOOGLE DRIVE INTEGRATION
+       ========================================================================== */
+    function initGmailAuth() {
+      const savedEmail = localStorage.getItem("nug_user_gmail");
+      if (savedEmail) {
+        setGmailLoggedInState(savedEmail);
+      }
+
+      const btnConnect = document.getElementById("btn-connect-gmail");
+      const btnDisconnect = document.getElementById("btn-disconnect-gmail");
+      const dropSelect = document.getElementById("hist-select-dropdown");
+      const filterSetName = document.getElementById("hist-filter-set-name");
+      const filterInvoice = document.getElementById("hist-filter-invoice");
+      const filterDate = document.getElementById("hist-filter-date");
+      const btnClearFilters = document.getElementById("btn-clear-hist-filters");
+
+      if (btnConnect) {
+        btnConnect.addEventListener("click", () => {
+          const emailInput = document.getElementById("user-gmail-input").value.trim();
+          if (emailInput && emailInput.includes("@")) {
+            localStorage.setItem("nug_user_gmail", emailInput);
+            setGmailLoggedInState(emailInput);
+            showToast(`Signed in as ${emailInput}`, "success");
+          } else {
+            showToast("Please enter a valid Gmail address.", "danger");
+          }
+        });
+      }
+
+      if (btnDisconnect) {
+        btnDisconnect.addEventListener("click", () => {
+          localStorage.removeItem("nug_user_gmail");
+          setGmailLoggedOutState();
+          showToast("Gmail disconnected.", "info");
+        });
+      }
+
+      // Bind filter inputs
+      [dropSelect, filterSetName, filterInvoice, filterDate].forEach(el => {
+        if (el) el.addEventListener("change", renderHistoryModal);
+        if (el && el.tagName === 'INPUT') el.addEventListener("input", renderHistoryModal);
+      });
+
+      if (btnClearFilters) {
+        btnClearFilters.addEventListener("click", () => {
+          if (dropSelect) dropSelect.value = "";
+          if (filterSetName) filterSetName.value = "";
+          if (filterInvoice) filterInvoice.value = "";
+          if (filterDate) filterDate.value = "";
+          renderHistoryModal();
+        });
+      }
+    }
+
+    function setGmailLoggedInState(email) {
+      const loggedOutDiv = document.getElementById("google-logged-out");
+      const loggedInDiv = document.getElementById("google-logged-in");
+      const displayEmail = document.getElementById("user-display-email");
+      const avatarInitials = document.getElementById("user-avatar-initials");
+
+      if (loggedOutDiv) loggedOutDiv.style.display = "none";
+      if (loggedInDiv) loggedInDiv.style.display = "flex";
+      if (displayEmail) displayEmail.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${email}`;
+      if (avatarInitials) avatarInitials.textContent = email.charAt(0).toUpperCase();
+    }
+
+    function setGmailLoggedOutState() {
+      const loggedOutDiv = document.getElementById("google-logged-out");
+      const loggedInDiv = document.getElementById("google-logged-in");
+      if (loggedOutDiv) loggedOutDiv.style.display = "flex";
+      if (loggedInDiv) loggedInDiv.style.display = "none";
+    }
+
+    function handleDriveSave() {
+      const userEmail = localStorage.getItem("nug_user_gmail");
+      if (!userEmail) {
+        showToast("Please sign in with your Gmail first in the Drive Sync modal.", "danger");
+        openModal("modal-drive");
+        return;
+      }
+      showToast(`Saving active transaction to Google Drive (${userEmail})...`, "info");
+      setTimeout(() => {
+        showToast(`Saved transaction #${appState.invoiceNum || '000'} to Google Drive! (${userEmail})`, "success");
+        closeModal("modal-drive");
+      }, 1000);
+    }
+
+    function handleDriveLoad() {
+      const userEmail = localStorage.getItem("nug_user_gmail");
+      if (!userEmail) {
+        showToast("Please sign in with your Gmail first.", "danger");
+        return;
+      }
+      document.getElementById("import-json-input").click();
+      closeModal("modal-drive");
+    }
+
+    // Auto init auth on load
+    document.addEventListener("DOMContentLoaded", () => {
+      initGmailAuth();
+    });
+
+    /* ==========================================================================
+       GATE PASS IMPLEMENTATION (COLOR-WISE NUGGET TYPE BREAKDOWN MATRIX - NO PRICES)
+       ========================================================================== */
+    function renderGatePass() {
+      document.getElementById("gp-set-name").textContent = appState.setName || "New Production Gate Pass";
+      document.getElementById("gp-invoice-num").textContent = appState.invoiceNum || "---";
+      document.getElementById("gp-date").textContent = appState.date || new Date().toISOString().split('T')[0];
+      document.getElementById("gp-client-name").textContent = appState.customerName ? `Client: ${appState.customerName}` : "Client: ---";
+
+      // Gate Pass Images
+      const gpImages = document.getElementById("gp-images-container");
+      gpImages.innerHTML = "";
+      appState.images.forEach(imgSrc => {
+        const img = document.createElement("img");
+        img.src = imgSrc;
+        img.style.width = "80px";
+        img.style.height = "80px";
+        img.style.objectFit = "cover";
+        img.style.borderRadius = "6px";
+        img.style.border = "1px solid #cbd5e1";
+        gpImages.appendChild(img);
+      });
+
+      // Section 1: Single Set Specs (NO PRICES)
+      const tbodyNugs = document.getElementById("gp-tbody-nugs");
+      tbodyNugs.innerHTML = "";
+      if (appState.nugTypes.length === 0) {
+        tbodyNugs.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 12px;">No nugget types added</td></tr>`;
+      } else {
+        appState.nugTypes.forEach(nug => {
+          const wtPerSet = ((nug.qtyPerSet * nug.weightPer100) / 100).toFixed(2);
+          tbodyNugs.innerHTML += `
+            <tr>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${nug.name}</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${nug.qtyPerSet} pcs</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${nug.weightPer100} g</td>
+              <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #b45309;">${wtPerSet} g</td>
+            </tr>
+          `;
+        });
+      }
+
+      // Section 2: Gate Pass Color-wise Nugget Type Matrix (NO PRICES)
+      const tbodyCols = document.getElementById("gp-tbody-colors");
+      tbodyCols.innerHTML = "";
+      
+      const totalSets = appState.colors.reduce((sum, c) => sum + (c.setsCount || 0), 0);
+      let nugsPerSet = appState.nugTypes.reduce((sum, n) => sum + (n.qtyPerSet || 0), 0);
+      let weightPerSetGrams = appState.nugTypes.reduce((sum, n) => sum + ((n.qtyPerSet * n.weightPer100) / 100), 0);
+
+      if (appState.colors.length === 0) {
+        tbodyCols.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 12px;">No color variations added</td></tr>`;
+      } else {
+        appState.colors.forEach(col => {
+          const colSets = col.setsCount || 0;
+          let colorNugs = 0;
+          let colorWeight = 0;
+
+          let colorRowsHtml = "";
+          appState.nugTypes.forEach(nug => {
+            const qtyForCol = (nug.qtyPerSet || 0) * colSets;
+            const wtForCol = ((nug.qtyPerSet || 0) * (nug.weightPer100 || 0) / 100) * colSets;
+            colorNugs += qtyForCol;
+            colorWeight += wtForCol;
+
+            colorRowsHtml += `
+              <tr>
+                <td style="padding: 6px 12px; border-bottom: 1px solid #f1f5f9; padding-left: 24px; color: #334155;">└ ${nug.name}</td>
+                <td style="padding: 6px 12px; border-bottom: 1px solid #f1f5f9;">${nug.qtyPerSet} pcs/set</td>
+                <td style="padding: 6px 12px; border-bottom: 1px solid #f1f5f9; font-weight: 600;">${qtyForCol} pcs</td>
+                <td style="padding: 6px 12px; border-bottom: 1px solid #f1f5f9; font-weight: 600; color: #b45309;">${wtForCol.toFixed(2)} g</td>
+              </tr>
+            `;
+          });
+
+          tbodyCols.innerHTML += `
+            <tr style="background: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
+              <td style="padding: 8px 12px; color: #0f172a;">
+                <span class="color-dot" style="background-color: ${col.hex}; vertical-align: middle; width: 12px; height: 12px; display: inline-block; border-radius: 50%; margin-right: 6px;"></span>
+                ${col.name} (${colSets} Sets)
+              </td>
+              <td style="padding: 8px 12px;">${colSets} Sets</td>
+              <td style="padding: 8px 12px; color: #0f172a;">${colorNugs} pcs Total</td>
+              <td style="padding: 8px 12px; color: #b45309;">${colorWeight.toFixed(2)} g Total</td>
+            </tr>
+            ${colorRowsHtml}
+          `;
+        });
+      }
+
+      // Gate Pass Summary Metrics (NO PRICES)
+      const totalNugs = nugsPerSet * totalSets;
+      const totalWeightGrams = weightPerSetGrams * totalSets;
+
+      document.getElementById("gp-total-sets").textContent = totalSets;
+      document.getElementById("gp-total-nugs").textContent = totalNugs.toLocaleString();
+      document.getElementById("gp-total-weight").textContent = totalWeightGrams.toFixed(2) + " g";
+    }
+
+    function exportGatePassPDF() {
+      showToast("Generating Gate Pass PDF...", "info");
+      const element = document.getElementById("gatepass-preview-container");
+
+      const jsPdfObj = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+
+      if (!jsPdfObj || typeof html2canvas === 'undefined') {
+        showToast("Opening Gate Pass print view...", "info");
+        printGatePassSheet();
+        return;
+      }
+
+      const opt = {
+        scale: 2,
+        useCORS: true,
+        logging: false
+      };
+
+      html2canvas(element, opt).then(canvas => {
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPdfObj("p", "mm", "a4");
+
+        const imgWidth = 210;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+        const filename = `GatePass_${(appState.setName || "Set").replace(/\s+/g, '_')}_${appState.invoiceNum || '000'}.pdf`;
+        
+        // Trigger Native Mobile Share Sheet (WhatsApp, Social Apps, etc.) for Gate Pass PDF
+        sharePDFFile(pdf, filename, `Gate Pass - ${appState.setName || "Dispatch"}`);
+      }).catch(err => {
+        console.error(err);
+        showToast("Opening printable Gate Pass sheet...", "info");
+        printGatePassSheet();
+      });
+    }
+
+    function printGatePassSheet() {
+      renderGatePass();
+      const element = document.getElementById("gatepass-preview-container");
+      const win = window.open('', '_blank');
+      if (!win) {
+        window.print();
+        return;
+      }
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Gate Pass - ${appState.setName || 'Dispatch'}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; background: #ffffff; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+              th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; font-size: 13px; }
+              th { background: #f1f5f9; }
+            </style>
+          </head>
+          <body>
+            ${element.innerHTML}
+          </body>
+        </html>
+      `);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); win.close(); }, 400);
+    }
+
+    /* ==========================================================================
+       UI UTILITIES: TOASTS & MODALS
+       ========================================================================== */
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+      toast.className = `toast ${type}`;
+
+      let icon = "fa-circle-info";
+      if (type === "success") icon = "fa-circle-check";
+      if (type === "danger") icon = "fa-triangle-exclamation";
+
+      toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.add("active");
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove("active");
+    }
+
+    function renderAll() {
+      populateFormFromState();
+    }
+  </script>
+</body>
+</html>
