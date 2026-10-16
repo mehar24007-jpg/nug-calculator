@@ -1662,6 +1662,14 @@
     document.addEventListener("DOMContentLoaded", async () => {
       initTabs();
       initFormListeners();
+
+      // Number fields start at 0: select the 0 on focus so typing replaces it ("12.5", not "012.5").
+      document.addEventListener("focusin", e => {
+        const el = e.target;
+        if (el && el.tagName === "INPUT" && el.type === "number" && parseFloat(el.value) === 0) {
+          setTimeout(() => { try { el.select(); } catch (_) {} }, 0);
+        }
+      });
       initDropzone();
       
       // Initialize Dexie DB
@@ -1877,12 +1885,32 @@
     function updateNugType(id, field, value) {
       const item = appState.nugTypes.find(n => n.id === id);
       if (item) {
-        if (field === 'name') item.name = value;
-        else item[field] = parseFloat(value) || 0;
-        renderMaterialCosts();
+        if (field === 'name') {
+          item.name = value;
+          // Update the name cell in place. Rebuilding the cost table here would destroy
+          // the cost input the user just tapped (blur fires first) and close the keyboard.
+          const safe = (window.CSS && CSS.escape) ? CSS.escape(item.id) : item.id;
+          const nameCell = document.querySelector(`#tbody-material-costs [data-mc-name="${safe}"]`);
+          if (nameCell) nameCell.textContent = value;
+        } else {
+          item[field] = parseFloat(value) || 0;
+          // Update only the computed cells in place. Re-rendering the table here
+          // would replace the input being typed in and close the mobile keyboard.
+          refreshNugComputedCells(item);
+        }
         calculate();
         saveDraftToLocalStorage();
       }
+    }
+
+    function refreshNugComputedCells(nug) {
+      const safeId = (window.CSS && CSS.escape) ? CSS.escape(nug.id) : nug.id;
+      const wtCell = document.querySelector(`#tbody-nug-types [data-wt-set="${safeId}"]`);
+      if (wtCell) wtCell.textContent = ((nug.qtyPerSet * nug.weightPer100) / 100).toFixed(2) + " g";
+      const qtyCell = document.querySelector(`#tbody-material-costs [data-mc-qty="${safeId}"]`);
+      if (qtyCell) qtyCell.textContent = nug.qtyPerSet + " pcs";
+      const setCell = document.querySelector(`#tbody-material-costs [data-mc-set="${safeId}"]`);
+      if (setCell) setCell.textContent = appState.currency + " " + ((nug.qtyPerSet / 100) * nug.materialCostPer100).toFixed(2);
     }
 
     function renderNugTypes() {
@@ -1908,7 +1936,7 @@
           <td>
             <input type="number" step="0.1" min="0" class="form-control" value="${nug.weightPer100}" oninput="updateNugType('${nug.id}', 'weightPer100', this.value)">
           </td>
-          <td style="font-weight: 700; color: var(--accent-gold);">${wtPerSet} g</td>
+          <td data-wt-set="${nug.id}" style="font-weight: 700; color: var(--accent-gold);">${wtPerSet} g</td>
           <td style="text-align: center;">
             <button class="btn btn-danger btn-sm btn-icon-only" onclick="removeNugType('${nug.id}')" title="Delete Type">
               <i class="fa-solid fa-trash-can"></i>
@@ -2008,15 +2036,15 @@
         const matCostPerSet = ((nug.qtyPerSet / 100) * nug.materialCostPer100).toFixed(2);
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td style="font-weight: 600;">${nug.name}</td>
-          <td>${nug.qtyPerSet} pcs</td>
+          <td data-mc-name="${nug.id}" style="font-weight: 600;">${nug.name}</td>
+          <td data-mc-qty="${nug.id}">${nug.qtyPerSet} pcs</td>
           <td>
             <div class="input-group">
               <span class="input-prefix currency-symbol">${appState.currency}</span>
               <input type="number" step="0.01" min="0" class="form-control" value="${nug.materialCostPer100}" oninput="updateNugType('${nug.id}', 'materialCostPer100', this.value)">
             </div>
           </td>
-          <td style="font-weight: 700; color: var(--accent-gold);">${appState.currency} ${matCostPerSet}</td>
+          <td data-mc-set="${nug.id}" style="font-weight: 700; color: var(--accent-gold);">${appState.currency} ${matCostPerSet}</td>
         `;
         tbody.appendChild(tr);
       });

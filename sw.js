@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nug-calc-v2';
+const CACHE_NAME = 'nug-calc-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -30,19 +30,15 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  // Network-first: always try the latest deployed files, fall back to cache when offline.
+  // (Cache-first used to keep serving an old index.html after a new deployment.)
   event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request).then(fetchRes => {
-        return caches.open(CACHE_NAME).then(cache => {
-          // Cache successful GET requests for offline use
-          if (event.request.url.startsWith('http') && fetchRes.status === 200) {
-            cache.put(event.request.url, fetchRes.clone());
-          }
-          return fetchRes;
-        });
-      });
-    }).catch(() => {
-      // Offline fallback if needed
-    })
+    fetch(event.request).then(fetchRes => {
+      if (event.request.url.startsWith('http') && fetchRes.status === 200) {
+        const copy = fetchRes.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+      }
+      return fetchRes;
+    }).catch(() => caches.match(event.request).then(r => r || caches.match('./index.html')))
   );
 });
