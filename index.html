@@ -26,6 +26,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+  <!-- Supabase (cloud sync) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 
   <style>
     :root {
@@ -493,6 +496,43 @@
       background: var(--danger);
       transform: scale(1.1);
     }
+
+    /* Home gallery / editor switching */
+    body.mode-home #editor-view, body.mode-home .editor-only, body.mode-home .mobile-floating-bar { display: none !important; }
+    body.mode-editor #home-view { display: none !important; }
+    .home-toolbar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+    .home-new-btn { width: 100%; justify-content: center; padding: 14px; font-size: 1rem; }
+    .home-search { position: relative; }
+    .home-search i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    .home-search input { padding-left: 40px; }
+    .home-meta { display: flex; justify-content: space-between; gap: 10px; font-size: 0.8rem; color: var(--text-muted); flex-wrap: wrap; }
+    .sync-status { color: var(--text-muted); }
+    .sync-status.ok { color: var(--success); }
+    .sync-status.warn { color: var(--accent-gold); }
+    .sync-status.err { color: var(--danger); }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; padding-bottom: 30px; }
+    @media (max-width: 520px) { .gallery-grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
+    .g-card {
+      background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md);
+      overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: var(--transition);
+    }
+    .g-card:hover, .g-card:focus-visible { border-color: var(--border-gold); outline: none; }
+    .g-thumb { aspect-ratio: 4 / 3; background: #1e293b; display: flex; align-items: center; justify-content: center; color: #475569; font-size: 2rem; }
+    .g-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .g-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+    .g-name { font-weight: 700; color: var(--text-main); font-size: 0.95rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .g-sub { font-size: 0.75rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-total { font-weight: 800; color: var(--accent-gold); font-size: 1rem; margin-top: 4px; font-family: 'Outfit', sans-serif; }
+    .g-foot { display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; gap: 6px; }
+    .g-actions { display: flex; gap: 4px; }
+    .g-actions button { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; }
+    .g-actions button:hover { color: var(--accent-gold); border-color: var(--border-gold); }
+    .g-actions button.del:hover { color: var(--danger); border-color: var(--danger); }
+    .g-pending { color: var(--accent-gold); }
+    .gallery-empty { grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px 10px; }
+    .editor-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .autosave-note { font-size: 0.78rem; color: var(--success); }
+    .autosave-note.saving { color: var(--text-muted); }
 
     /* Saved Nug Types Library */
     .lib-header { cursor: pointer; user-select: none; }
@@ -1044,7 +1084,7 @@
     }
   </style>
 </head>
-<body>
+<body class="mode-home">
 
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>
@@ -1072,11 +1112,15 @@
           <option value="AED">AED</option>
         </select>
 
-        <button class="btn btn-secondary btn-sm" id="btn-open-history" title="Saved History">
-          <i class="fa-solid fa-folder-open"></i> History
+        <button class="btn btn-secondary btn-sm editor-only" id="btn-go-home" title="All items">
+          <i class="fa-solid fa-house"></i> Home
         </button>
 
-        <button class="btn btn-outline-gold btn-sm" id="hdr-btn-gate-pass" title="Generate Production Gate Pass">
+        <button class="btn btn-secondary btn-sm" id="btn-cloud" title="Cloud sync (Supabase)">
+          <i class="fa-solid fa-cloud"></i> <span id="cloud-btn-label">Cloud</span>
+        </button>
+
+        <button class="btn btn-outline-gold btn-sm editor-only" id="hdr-btn-gate-pass" title="Generate Production Gate Pass">
           <i class="fa-solid fa-id-card"></i> Gate Pass
         </button>
 
@@ -1084,20 +1128,40 @@
           <i class="fa-solid fa-shield-halved"></i> Backup
         </button>
 
-        <button class="btn btn-primary btn-sm" id="btn-quick-save" title="Save current set">
-          <i class="fa-solid fa-floppy-disk"></i> Save Set
-        </button>
-
-        <button class="btn btn-danger btn-sm btn-icon-only" id="btn-reset-all" title="Reset All Fields">
-          <i class="fa-solid fa-rotate-left"></i>
-        </button>
       </div>
     </div>
   </header>
 
   <!-- Main Container -->
   <main class="container" style="margin-top: 10px;">
-    
+
+    <!-- HOME: gallery of all saved item calculations -->
+    <section id="home-view">
+      <div class="home-toolbar">
+        <button class="btn btn-primary home-new-btn" id="btn-new-item">
+          <i class="fa-solid fa-plus"></i> Add New Nug Calculation
+        </button>
+        <div class="home-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" id="home-search" class="form-control" placeholder="Search name, client, invoice, nug type, color…" autocomplete="off">
+        </div>
+        <div class="home-meta">
+          <span id="home-count">0 items</span>
+          <span class="sync-status" id="home-sync-status"></span>
+        </div>
+      </div>
+      <div class="gallery-grid" id="gallery-grid"></div>
+    </section>
+
+    <div id="editor-view">
+    <div class="editor-bar">
+      <button class="btn btn-secondary btn-sm" onclick="goHome()"><i class="fa-solid fa-arrow-left"></i> All Items</button>
+      <span class="autosave-note" id="autosave-note"><i class="fa-solid fa-circle-check"></i> Auto-saved</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-secondary btn-sm btn-icon-only" onclick="duplicateCurrentItem()" title="Make a copy"><i class="fa-solid fa-copy"></i></button>
+      <button class="btn btn-danger btn-sm btn-icon-only" onclick="deleteItem(currentItemId)" title="Delete this item"><i class="fa-solid fa-trash-can"></i></button>
+    </div>
+
     <!-- Navigation Tabs -->
     <nav class="tabs-nav" id="tabs-navigation">
       <button class="tab-btn active" data-tab="tab-set-info">
@@ -1501,6 +1565,7 @@
       </div>
     </section>
 
+    </div><!-- /editor-view -->
   </main>
 
   <!-- Mobile Floating Summary Bar -->
@@ -1514,54 +1579,49 @@
     </button>
   </div>
 
-  <!-- History Drawer Modal -->
-  <div class="modal-overlay" id="modal-history">
-    <div class="modal" style="max-width: 850px;">
+  <!-- Cloud Sync (Supabase) Modal -->
+  <div class="modal-overlay" id="modal-cloud">
+    <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title"><i class="fa-solid fa-box-archive"></i> Saved Transactions & History Manager</h3>
-        <button class="btn btn-secondary btn-sm btn-icon-only" onclick="closeModal('modal-history')">
+        <h3 class="modal-title"><i class="fa-solid fa-cloud"></i> Cloud Sync</h3>
+        <button class="btn btn-secondary btn-sm btn-icon-only" onclick="closeModal('modal-cloud')">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
       <div class="modal-body">
-        <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
-          <button class="btn btn-secondary btn-sm" id="btn-export-json">
-            <i class="fa-solid fa-download"></i> Full Backup
-          </button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-json-input').click()">
-            <i class="fa-solid fa-upload"></i> Restore Backup
-          </button>
-          <input type="file" id="import-json-input" accept=".json,application/json" style="display: none;">
-        </div>
-        <p class="backup-status" style="font-size: 0.75rem; color: var(--text-muted); margin: -6px 0 14px;"></p>
-
-        <!-- Filter Controls Bar -->
-        <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px;">
-          <!-- Dropdown Select List -->
-          <div class="form-group">
-            <label for="hist-select-dropdown">Select Saved Transaction From List:</label>
-            <select id="hist-select-dropdown" class="form-control" style="font-weight: 600; color: var(--accent-gold);">
-              <option value="">-- Choose a Saved Set to View / Load --</option>
-            </select>
+        <div id="cloud-logged-out">
+          <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 14px;">
+            Log in to keep every calculation backed up online automatically. Use the same login on any phone or computer to get all your items back.
+          </p>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label for="cloud-email">Email</label>
+            <input type="email" id="cloud-email" class="form-control" placeholder="you@gmail.com" autocomplete="email">
           </div>
-
-          <!-- Search Inputs & Date Filter -->
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <input type="text" id="hist-filter-set-name" class="form-control" placeholder="✏️ Filter by Set Name..." style="flex: 2; min-width: 160px;">
-            <input type="text" id="hist-filter-invoice" class="form-control" placeholder="🧾 Filter by Invoice #..." style="flex: 1.5; min-width: 140px;">
-            <input type="date" id="hist-filter-date" class="form-control" style="flex: 1.2; min-width: 130px;" title="Filter by Date">
-            <button class="btn btn-secondary btn-sm" id="btn-clear-hist-filters">Reset Filters</button>
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label for="cloud-password">Password (at least 6 characters)</label>
+            <input type="password" id="cloud-password" class="form-control" autocomplete="current-password">
           </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button class="btn btn-primary" id="btn-cloud-login"><i class="fa-solid fa-right-to-bracket"></i> Log In</button>
+            <button class="btn btn-outline-gold" id="btn-cloud-signup"><i class="fa-solid fa-user-plus"></i> Create Account</button>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-cloud-reset" style="margin-top: 10px; width: 100%;">Forgot password?</button>
+          <p id="cloud-msg" style="font-size: 0.8rem; color: var(--accent-gold); margin-top: 12px;"></p>
         </div>
 
-        <div id="history-items-list">
-          <!-- Dynamically populated history -->
+        <div id="cloud-logged-in" style="display: none;">
+          <p style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 4px;"><i class="fa-solid fa-circle-check" style="color: var(--success);"></i> Logged in as <strong id="cloud-user-email"></strong></p>
+          <p class="sync-status" style="font-size: 0.8rem; margin-bottom: 16px;"></p>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn btn-primary" id="btn-cloud-sync-now"><i class="fa-solid fa-rotate"></i> Sync Now</button>
+            <button class="btn btn-danger btn-sm" id="btn-cloud-logout"><i class="fa-solid fa-right-from-bracket"></i> Log Out</button>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 12px;">Every change saves on this phone instantly and uploads to the cloud within a few seconds when online.</p>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Google Drive Settings & Gmail Sync Modal -->
   <div class="modal-overlay" id="modal-drive">
     <div class="modal">
       <div class="modal-header">
@@ -1576,6 +1636,7 @@
           Keep it in Google Drive so you can restore on a new phone or after clearing the browser.
         </p>
         <p class="backup-status" style="font-size: 0.8rem; color: var(--accent-gold); margin-bottom: 16px;"></p>
+        <input type="file" id="import-json-input" accept=".json,application/json" style="display: none;">
 
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <button class="btn btn-primary" id="btn-drive-save-cloud">
@@ -1739,9 +1800,21 @@
       // Local database for the open draft and saved history (no external library needed).
       window.db = await openAppDB();
 
-      await loadDraftFromLocalStorage();
-      renderAll();
+      await migrateOldData();
+      appState = blankState();
+      populateFormFromState();
+      initGallery();
+      setMode("home");
+      await renderGallery();
+      initCloud();
       updateBackupStatus();
+
+      // Save immediately if the app is being closed / switched away.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushAutosave();
+        else if (sbUser) scheduleCloudSync(300);
+      });
+      window.addEventListener("pagehide", () => { flushAutosave(); });
     });
 
     /* ==========================================================================
@@ -1876,13 +1949,9 @@
       // Dynamic Buttons
       document.getElementById("btn-add-nug-type").addEventListener("click", () => addNugType());
       document.getElementById("btn-add-color").addEventListener("click", () => addColor());
-      document.getElementById("btn-quick-save").addEventListener("click", saveCurrentSetToHistory);
-      document.getElementById("btn-open-history").addEventListener("click", () => { renderHistoryModal(); openModal("modal-history"); });
       document.getElementById("btn-drive-sync").addEventListener("click", () => openModal("modal-drive"));
-      document.getElementById("btn-reset-all").addEventListener("click", resetAll);
 
       // JSON Export/Import
-      document.getElementById("btn-export-json").addEventListener("click", () => exportFullBackup("download"));
       document.getElementById("import-json-input").addEventListener("change", importJSONFile);
 
       // Drive Modal Buttons
@@ -1937,17 +2006,18 @@
       });
     }
 
-    function handleFiles(files) {
-      Array.from(files).forEach(file => {
-        if (!file.type.startsWith("image/")) return;
-        const reader = new FileReader();
-        reader.onload = e => {
-          appState.images.push(e.target.result);
-          renderImagePreviews();
-          saveDraftToLocalStorage();
-        };
-        reader.readAsDataURL(file);
-      });
+    async function handleFiles(files) {
+      const list = Array.from(files).filter(f => f.type.startsWith("image/"));
+      if (!list.length) return;
+      if (list.length > 1 || list[0].size > 1500000) showToast("Adding photo" + (list.length > 1 ? "s" : "") + "…", "info");
+      for (const file of list) {
+        const dataUrl = await compressImageFile(file);
+        appState.images.push(dataUrl);
+        renderImagePreviews();
+        saveDraftToLocalStorage();
+      }
+      const fi = document.getElementById("file-input");
+      if (fi) fi.value = "";
     }
 
     function removeImage(index) {
@@ -2128,9 +2198,13 @@
       }
     }
 
-    function saveNugLibrary() {
+    function saveNugLibrary(touch = true) {
       try {
         localStorage.setItem(STORAGE_KEY_NUG_LIBRARY, JSON.stringify(nugLibrary));
+        if (touch) {
+          localStorage.setItem(STORAGE_KEY_LIB_UPDATED, new Date().toISOString());
+          if (typeof scheduleCloudSync === "function") scheduleCloudSync();
+        }
       } catch (_) {
         showToast("Could not save nug types on this device.", "danger");
       }
@@ -2962,35 +3036,350 @@
     }
 
     /* ==========================================================================
-       LOCALSTORAGE HISTORY & PERSISTENCE
+       ITEMS: AUTO-SAVE, GALLERY, OPEN / NEW / COPY / DELETE
+       Every calculation is an "item" stored on the phone (IndexedDB store
+       "history"). Each edit auto-saves it within half a second, then it is
+       uploaded to Supabase when logged in. There is no manual Save button.
        ========================================================================== */
     const STORAGE_KEY_DRAFT = "nug_calc_current_draft";
-    const STORAGE_KEY_HISTORY = "nug_calc_saved_history";
+    const STORAGE_KEY_LAST_CURRENCY = "nug_calc_last_currency";
+    let currentItemId = null;
+    let autosaveTimer = null;
+    let thumbCache = { src: null, thumb: null };
 
-    async function saveDraftToLocalStorage() {
+    function newItemId() {
+      return "item-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    }
+
+    function blankState() {
+      let curr = "Rs.";
+      try { curr = localStorage.getItem(STORAGE_KEY_LAST_CURRENCY) || "Rs."; } catch (_) {}
+      return normalizeSetState({ currency: curr });
+    }
+
+    function computeTotals(st) {
+      const totalSets = (st.colors || []).reduce((s, c) => s + (parseFloat(c.setsCount) || 0), 0);
+      const nugsPerSet = (st.nugTypes || []).reduce((s, n) => s + (n.qtyPerSet || 0), 0);
+      const laborPerSet = (nugsPerSet / 100) * (st.globalLaborCostPer100 || 0);
+      const matPerSet = (st.nugTypes || []).reduce((s, n) => s + (((n.qtyPerSet || 0) * (n.materialCostPer100 || 0)) / 100), 0);
+      const totalMaterialCost = matPerSet * totalSets;
+      const scrapCost = totalMaterialCost * ((st.wastePercent || 0) / 100);
+      return { totalSets, grandTotalCost: (laborPerSet * totalSets) + totalMaterialCost + scrapCost };
+    }
+
+    function setAutosaveNote(saving) {
+      const el = document.getElementById("autosave-note");
+      if (!el) return;
+      el.classList.toggle("saving", !!saving);
+      el.innerHTML = saving
+        ? '<i class="fa-solid fa-spinner fa-spin"></i> Saving…'
+        : '<i class="fa-solid fa-circle-check"></i> Auto-saved';
+    }
+
+    // Name kept from the old code: every edit in the app already calls this.
+    function saveDraftToLocalStorage() {
       if (!window.db) return;
-      try {
-        await db.draft.put({ id: 'current', state: JSON.parse(JSON.stringify(appState)) });
-      } catch (err) {
-        console.error("Draft save failed:", err);
+      try { if (appState.currency) localStorage.setItem(STORAGE_KEY_LAST_CURRENCY, appState.currency); } catch (_) {}
+      if (!currentItemId && stateIsEmpty(appState)) return; // don't create empty items
+      setAutosaveNote(true);
+      clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(persistCurrentItem, 500);
+    }
+
+    async function flushAutosave() {
+      if (autosaveTimer) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+        await persistCurrentItem();
       }
     }
 
-    async function loadDraftFromLocalStorage() {
-      let draft = null;
-      try { draft = await db.draft.get('current'); } catch (err) { console.error("Draft load failed:", err); }
-      if (draft && draft.state) {
-        try {
-          if (draft.state.setName === "Royal Crown Nugget Collection") {
-            await db.draft.delete('current');
-          } else {
-            appState = draft.state;
-          }
-        } catch (e) {
-          console.error("Failed to load draft:", e);
-        }
+    async function persistCurrentItem() {
+      autosaveTimer = null;
+      if (!window.db) return;
+      if (!currentItemId) {
+        if (stateIsEmpty(appState)) { setAutosaveNote(false); return; }
+        currentItemId = newItemId();
       }
+      try {
+        const id = currentItemId;
+        const existing = await db.history.get(id);
+        const now = new Date().toISOString();
+        const totals = computeTotals(appState);
+        await db.history.put({
+          id,
+          createdAt: (existing && (existing.createdAt || existing.timestamp)) || now,
+          timestamp: now,
+          name: appState.setName || "",
+          invoice: appState.invoiceNum || "",
+          customerName: appState.customerName || "",
+          currency: appState.currency || "Rs.",
+          totalSets: totals.totalSets,
+          grandTotalCost: totals.grandTotalCost,
+          thumb: await makeThumb(appState.images && appState.images[0]),
+          state: JSON.parse(JSON.stringify(appState)),
+          deleted: false,
+          dirty: true
+        });
+        setAutosaveNote(false);
+        scheduleCloudSync();
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+        showToast("Could not save on this phone — storage may be full. Remove old photos/items.", "danger");
+      }
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    // Small 4:3 picture for the gallery card (keeps the gallery fast).
+    async function makeThumb(src) {
+      if (!src) return null;
+      if (thumbCache.src === src) return thumbCache.thumb;
+      try {
+        const img = await loadImage(src);
+        const W = 360, H = 270;
+        const c = document.createElement("canvas");
+        c.width = W; c.height = H;
+        const scale = Math.max(W / img.width, H / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        c.getContext("2d").drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+        const thumb = c.toDataURL("image/jpeg", 0.72);
+        thumbCache = { src, thumb };
+        return thumb;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // Shrink big phone photos before saving (keeps storage + uploads small).
+    async function compressImageFile(file, maxSide = 1400, quality = 0.82) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = e => resolve(e.target.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      try {
+        const img = await loadImage(dataUrl);
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        const out = c.toDataURL("image/jpeg", quality);
+        return out.length < dataUrl.length ? out : dataUrl;
+      } catch (_) {
+        return dataUrl;
+      }
+    }
+
+    function setMode(mode) {
+      document.body.classList.toggle("mode-home", mode === "home");
+      document.body.classList.toggle("mode-editor", mode === "editor");
+      window.scrollTo({ top: 0 });
+    }
+
+    async function getAllItemsRaw() {
+      try { return await db.history.toArray(); } catch (err) { console.error("Item load failed:", err); return []; }
+    }
+
+    // All items that aren't deleted, newest first.
+    async function getSavedHistory() {
+      const all = await getAllItemsRaw();
+      return all.filter(i => !i.deleted && i.state)
+        .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
+    }
+
+    function itemSearchText(item) {
+      const st = item.state || {};
+      return [
+        item.name, item.invoice, item.customerName, st.notes,
+        ...(st.nugTypes || []).map(n => n.name),
+        ...(st.colors || []).map(c => c.name)
+      ].filter(Boolean).join(" ").toLowerCase();
+    }
+
+    async function renderGallery() {
+      const grid = document.getElementById("gallery-grid");
+      if (!grid) return;
+      const items = await getSavedHistory();
+      const q = (document.getElementById("home-search").value || "").trim().toLowerCase();
+      const words = q.split(/\s+/).filter(Boolean);
+      const list = words.length ? items.filter(it => { const t = itemSearchText(it); return words.every(w => t.includes(w)); }) : items;
+
+      document.getElementById("home-count").textContent =
+        words.length ? `${list.length} of ${items.length} items` : `${items.length} item${items.length === 1 ? "" : "s"}`;
+
+      if (!items.length) {
+        grid.innerHTML = `<div class="gallery-empty"><i class="fa-solid fa-gem fa-2x" style="margin-bottom: 10px;"></i><br>No calculations yet.<br>Tap <strong>Add New Nug Calculation</strong> to start.</div>`;
+        return;
+      }
+      if (!list.length) {
+        grid.innerHTML = `<div class="gallery-empty">Nothing matches "${escapeHtml(q)}".</div>`;
+        return;
+      }
+
+      grid.innerHTML = list.map(it => {
+        const curr = escapeHtml(it.currency || "Rs.");
+        const total = (Number(it.grandTotalCost) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        const date = it.timestamp ? new Date(it.timestamp).toLocaleDateString() : "";
+        const img = it.thumb
+          ? `<img src="${it.thumb}" alt="" loading="lazy">`
+          : (it.state.images && it.state.images[0] ? `<img src="${it.state.images[0]}" alt="" loading="lazy">` : `<i class="fa-solid fa-gem"></i>`);
+        const sub = [it.customerName, it.invoice ? "#" + it.invoice : ""].filter(Boolean).map(escapeHtml).join(" · ");
+        const pending = sbUser && it.dirty !== false ? ` <i class="fa-solid fa-cloud-arrow-up g-pending" title="Waiting to upload"></i>` : "";
+        return `
+          <div class="g-card" tabindex="0" role="button" data-open-id="${it.id}">
+            <div class="g-thumb">${img}</div>
+            <div class="g-body">
+              <div class="g-name">${escapeHtml(it.name || "Untitled item")}</div>
+              ${sub ? `<div class="g-sub">${sub}</div>` : ""}
+              <div class="g-sub">${it.totalSets || 0} sets · ${(it.state.nugTypes || []).length} nug types</div>
+              <div class="g-total">${curr} ${total}</div>
+              <div class="g-foot">
+                <span>${date}${pending}</span>
+                <span class="g-actions">
+                  <button data-copy-id="${it.id}" title="Copy"><i class="fa-solid fa-copy"></i></button>
+                  <button class="del" data-del-id="${it.id}" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
+                </span>
+              </div>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    function initGallery() {
+      const grid = document.getElementById("gallery-grid");
+      grid.addEventListener("click", e => {
+        const copy = e.target.closest("[data-copy-id]");
+        if (copy) { e.stopPropagation(); duplicateItem(copy.getAttribute("data-copy-id")); return; }
+        const del = e.target.closest("[data-del-id]");
+        if (del) { e.stopPropagation(); deleteItem(del.getAttribute("data-del-id")); return; }
+        const card = e.target.closest("[data-open-id]");
+        if (card) openItem(card.getAttribute("data-open-id"));
+      });
+      grid.addEventListener("keydown", e => {
+        if (e.key !== "Enter") return;
+        const card = e.target.closest("[data-open-id]");
+        if (card && e.target === card) openItem(card.getAttribute("data-open-id"));
+      });
+      document.getElementById("home-search").addEventListener("input", renderGallery);
+      document.getElementById("btn-new-item").addEventListener("click", newItem);
+      document.getElementById("btn-go-home").addEventListener("click", goHome);
+    }
+
+    async function goHome() {
+      await flushAutosave();
+      closeNugDropdown();
+      currentItemId = null;
+      appState = blankState();
       populateFormFromState();
+      setMode("home");
+      await renderGallery();
+    }
+
+    async function openItem(id) {
+      await flushAutosave();
+      let item = null;
+      try { item = await db.history.get(id); } catch (_) {}
+      if (!item || !item.state) { showToast("Item not found.", "danger"); renderGallery(); return; }
+      currentItemId = id;
+      appState = normalizeSetState(JSON.parse(JSON.stringify(item.state)));
+      populateFormFromState();
+      setAutosaveNote(false);
+      setMode("editor");
+      switchTab("tab-set-info");
+    }
+
+    async function newItem() {
+      await flushAutosave();
+      currentItemId = null;
+      appState = blankState();
+      populateFormFromState();
+      setAutosaveNote(false);
+      setMode("editor");
+      switchTab("tab-set-info");
+      setTimeout(() => { try { document.getElementById("set-name").focus(); } catch (_) {} }, 50);
+    }
+
+    async function duplicateItem(id) {
+      await flushAutosave();
+      const item = await db.history.get(id);
+      if (!item || !item.state) return;
+      const now = new Date().toISOString();
+      const st = JSON.parse(JSON.stringify(item.state));
+      st.setName = (st.setName || "Untitled") + " (Copy)";
+      st.invoiceNum = "";
+      const copy = Object.assign({}, item, {
+        id: newItemId(), createdAt: now, timestamp: now, name: st.setName, invoice: "",
+        state: st, deleted: false, dirty: true
+      });
+      await db.history.put(copy);
+      scheduleCloudSync();
+      showToast("Copy made — opening it.", "success");
+      openItem(copy.id);
+    }
+
+    async function duplicateCurrentItem() {
+      await flushAutosave();
+      if (!currentItemId) { showToast("Fill something in first — there's nothing to copy yet.", "info"); return; }
+      duplicateItem(currentItemId);
+    }
+
+    async function deleteItem(id) {
+      if (!id) {
+        // Unsaved new item: just leave it.
+        goHome();
+        return;
+      }
+      await flushAutosave();
+      const item = await db.history.get(id);
+      if (!item) return;
+      if (!confirm(`Delete "${item.name || "Untitled item"}"? This also removes it from the cloud.`)) return;
+      // Kept as a hidden "deleted" marker so the delete also reaches the cloud and other phones.
+      item.deleted = true;
+      item.dirty = true;
+      item.timestamp = new Date().toISOString();
+      await db.history.put(item);
+      scheduleCloudSync(500);
+      showToast("Item deleted.", "info");
+      if (id === currentItemId) await goHome(); else renderGallery();
+    }
+
+    // One-time: older versions kept a single "current" draft. Turn it into an item.
+    async function migrateOldData() {
+      try {
+        const draft = await db.draft.get("current");
+        if (draft && draft.state && isValidSetState(draft.state) && !stateIsEmpty(draft.state)
+            && draft.state.setName !== "Royal Crown Nugget Collection") {
+          const items = await getSavedHistory();
+          const json = JSON.stringify(draft.state);
+          if (!items.some(i => JSON.stringify(i.state) === json)) {
+            const now = new Date().toISOString();
+            const st = normalizeSetState(draft.state);
+            const totals = computeTotals(st);
+            await db.history.put({
+              id: newItemId(), createdAt: now, timestamp: now,
+              name: st.setName || "", invoice: st.invoiceNum || "", customerName: st.customerName || "",
+              currency: st.currency || "Rs.", totalSets: totals.totalSets, grandTotalCost: totals.grandTotalCost,
+              thumb: await makeThumb(st.images[0]), state: st, deleted: false, dirty: true
+            });
+          }
+        }
+        if (draft) await db.draft.delete("current");
+      } catch (err) {
+        console.warn("Migration skipped:", err);
+      }
     }
 
     function populateFormFromState() {
@@ -3012,177 +3401,275 @@
       calculate();
     }
 
-    async function saveCurrentSetToHistory() {
-      const totalSets = appState.colors.reduce((s, c) => s + (c.setsCount || 0), 0);
-      let nugsPerSet = appState.nugTypes.reduce((s, n) => s + (n.qtyPerSet || 0), 0);
-      let laborPerSet = (nugsPerSet / 100) * (appState.globalLaborCostPer100 || 0);
-      let matPerSet = appState.nugTypes.reduce((s, n) => s + ((n.qtyPerSet * n.materialCostPer100) / 100), 0);
-      let totalMaterialCost = matPerSet * totalSets;
-      let scrapCost = totalMaterialCost * ((appState.wastePercent || 0) / 100);
-      let grandTotalCost = (laborPerSet * totalSets) + totalMaterialCost + scrapCost;
+    /* ==========================================================================
+       CLOUD SYNC (SUPABASE)
+       Items and the saved nug types list are uploaded automatically when logged in.
+       Row Level Security on the tables means each login only sees its own data.
+       ========================================================================== */
+    const SUPABASE_URL = "https://tesqwtbyvuzhbmtrgatk.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_h2pPlx0RkEp1G2ahXcX_pA_l3gPY4dF";
+    const STORAGE_KEY_LIB_UPDATED = "nug_calc_lib_updated";
+    let sb = null, sbUser = null;
+    let syncing = false, syncAgain = false, syncTimer = null;
+    let lastSyncStatus = { text: "", cls: "" };
 
-      const setEntry = {
-        id: "set-" + Date.now(),
-        timestamp: new Date().toISOString(),
-        name: appState.setName || "Untitled Set",
-        invoice: appState.invoiceNum || "INV-000",
-        customerName: appState.customerName || "",
-        currency: appState.currency || "Rs.",
-        totalSets,
-        grandTotalCost,
-        state: JSON.parse(JSON.stringify(appState))
-      };
+    function setSyncStatus(text, cls = "") {
+      lastSyncStatus = { text, cls };
+      document.querySelectorAll(".sync-status").forEach(el => {
+        el.textContent = text;
+        el.className = "sync-status" + (cls ? " " + cls : "");
+      });
+    }
+
+    function updateCloudUI() {
+      const label = document.getElementById("cloud-btn-label");
+      const out = document.getElementById("cloud-logged-out");
+      const inn = document.getElementById("cloud-logged-in");
+      if (sbUser) {
+        if (label) label.textContent = "Synced";
+        out.style.display = "none";
+        inn.style.display = "block";
+        document.getElementById("cloud-user-email").textContent = sbUser.email || "";
+      } else {
+        if (label) label.textContent = "Login";
+        out.style.display = "block";
+        inn.style.display = "none";
+        setSyncStatus(sb ? "Saved on this phone only — tap Login for cloud backup" : "Cloud not reachable — saved on this phone", "warn");
+      }
+    }
+
+    function scheduleCloudSync(delay = 2500) {
+      if (!sb || !sbUser) return;
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(cloudSync, delay);
+    }
+
+    function isoTs(t) {
+      const d = new Date(t);
+      return isNaN(d) ? "" : d.toISOString();
+    }
+
+    async function cloudSync() {
+      if (!sb || !sbUser) return;
+      if (!navigator.onLine) { setSyncStatus("Offline — will upload when internet is back", "warn"); return; }
+      if (syncing) { syncAgain = true; return; }
+      syncing = true;
+      setSyncStatus("Syncing with cloud…");
       try {
-        await db.history.put(setEntry);
+        await flushAutosave();
+        await pushItems();
+        const pulled = await pullItems();
+        await syncLibrary();
+        setSyncStatus("All saved to cloud ✓ " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
+        if (document.body.classList.contains("mode-home") || pulled) renderGallery();
       } catch (err) {
-        console.error(err);
-        showToast("Could not save — phone storage may be full. Take a backup and remove old sets/photos.", "danger");
-        return;
+        console.error("Cloud sync failed:", err);
+        setSyncStatus("Cloud sync failed, will retry — " + (err && err.message ? err.message : "error"), "err");
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(cloudSync, 30000);
+      } finally {
+        syncing = false;
+        if (syncAgain) { syncAgain = false; setTimeout(cloudSync, 300); }
       }
-      showToast("Transaction saved to in-app history!", "success");
-      renderHistoryModal();
     }
 
-    async function getSavedHistory() {
-      let all = [];
-      try { all = await db.history.toArray(); } catch (err) { console.error("History load failed:", err); }
-      // Newest first
-      return all.sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
-    }
-
-    async function renderHistoryModal() {
-      const container = document.getElementById("history-items-list");
-      const dropdownSelect = document.getElementById("hist-select-dropdown");
-      let allHistory = await getSavedHistory();
-
-      if (!allHistory.length) {
-        container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">No saved transactions found.</p>`;
-        if (dropdownSelect) dropdownSelect.innerHTML = `<option value="">-- No Saved Transactions Available --</option>`;
-        return;
-      }
-
-      if (dropdownSelect) {
-        const currentVal = dropdownSelect.value;
-        dropdownSelect.innerHTML = `<option value="">-- Choose a Saved Set from Dropdown (${allHistory.length} Total) --</option>`;
-        allHistory.forEach(item => {
-          const opt = document.createElement("option");
-          opt.value = item.id;
-          const dt = item.timestamp ? item.timestamp.split('T')[0] : '';
-          opt.textContent = `${dt} | ${item.name || 'Untitled'} (Inv: #${item.invoice || '---'}) - ${item.currency || 'Rs.'} ${parseFloat(item.grandTotalCost || 0).toFixed(2)}`;
-          if (item.id === currentVal) opt.selected = true;
-          dropdownSelect.appendChild(opt);
-        });
-      }
-
-      const selectedId = dropdownSelect?.value || "";
-      const filterSetName = (document.getElementById("hist-filter-set-name")?.value || "").toLowerCase().trim();
-      const filterInvoice = (document.getElementById("hist-filter-invoice")?.value || "").toLowerCase().trim();
-      const filterDate = document.getElementById("hist-filter-date")?.value || "";
-
-      let filteredHistory = allHistory.filter(item => {
-        if (selectedId) return item.id === selectedId;
-        const matchesSetName = !filterSetName || (item.name && item.name.toLowerCase().includes(filterSetName));
-        const matchesInvoice = !filterInvoice || (item.invoice && item.invoice.toLowerCase().includes(filterInvoice));
-        let matchesDate = true;
-        if (filterDate) {
-          const itemDate = item.timestamp ? item.timestamp.split('T')[0] : (item.state?.date || '');
-          matchesDate = (itemDate === filterDate);
+    async function pushItems() {
+      const dirty = (await getAllItemsRaw()).filter(i => i.dirty !== false && i.state);
+      for (let i = 0; i < dirty.length; i += 10) {
+        const chunk = dirty.slice(i, i + 10);
+        const rows = chunk.map(it => ({
+          id: it.id,
+          name: it.name || "",
+          invoice: it.invoice || "",
+          customer: it.customerName || "",
+          currency: it.currency || "Rs.",
+          total_sets: Math.round(Number(it.totalSets) || 0),
+          grand_total: Number(it.grandTotalCost) || 0,
+          thumb: it.thumb || null,
+          state: it.state,
+          deleted: !!it.deleted,
+          created_at: it.createdAt || it.timestamp || new Date().toISOString(),
+          updated_at: it.timestamp || new Date().toISOString()
+        }));
+        const { error } = await sb.from("nug_items").upsert(rows, { onConflict: "id" });
+        if (error) throw error;
+        for (const it of chunk) {
+          const cur = await db.history.get(it.id);
+          // Only mark as uploaded if it wasn't edited again while uploading.
+          if (cur && cur.timestamp === it.timestamp) { cur.dirty = false; await db.history.put(cur); }
         }
-        return matchesSetName && matchesInvoice && matchesDate;
+      }
+    }
+
+    async function pullItems() {
+      const key = "nug_calc_last_pull_" + sbUser.id;
+      let since = "1970-01-01T00:00:00.000Z";
+      try { since = localStorage.getItem(key) || since; } catch (_) {}
+      let maxTs = since, changed = false, from = 0;
+      const PAGE = 25;
+      while (true) {
+        const { data, error } = await sb.from("nug_items").select("*")
+          .gt("updated_at", since).order("updated_at", { ascending: true }).range(from, from + PAGE - 1);
+        if (error) throw error;
+        for (const row of data) {
+          const ts = isoTs(row.updated_at);
+          if (ts > maxTs) maxTs = ts;
+          const local = await db.history.get(row.id);
+          if (local && String(local.timestamp || "") >= ts) continue; // ours is same or newer
+          await db.history.put({
+            id: row.id,
+            createdAt: isoTs(row.created_at) || ts,
+            timestamp: ts,
+            name: row.name || "",
+            invoice: row.invoice || "",
+            customerName: row.customer || "",
+            currency: row.currency || "Rs.",
+            totalSets: row.total_sets || 0,
+            grandTotalCost: Number(row.grand_total) || 0,
+            thumb: row.thumb || null,
+            state: row.state,
+            deleted: !!row.deleted,
+            dirty: false
+          });
+          changed = true;
+          // The open item was deleted on another phone.
+          if (row.deleted && row.id === currentItemId) {
+            showToast("This item was deleted on another device.", "info");
+            currentItemId = null;
+            goHome();
+          }
+        }
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      try { localStorage.setItem(key, maxTs); } catch (_) {}
+      return changed;
+    }
+
+    async function syncLibrary() {
+      const uid = sbUser.id;
+      const pushedKey = "nug_calc_lib_pushed_" + uid;
+      let localTs = "", pushedTs = "";
+      try { localTs = localStorage.getItem(STORAGE_KEY_LIB_UPDATED) || ""; pushedTs = localStorage.getItem(pushedKey) || ""; } catch (_) {}
+
+      const { data, error } = await sb.from("nug_library").select("items, updated_at").eq("user_id", uid).maybeSingle();
+      if (error) throw error;
+
+      let merged = false;
+      if (data) {
+        const remoteTs = isoTs(data.updated_at);
+        if (remoteTs > pushedTs) {
+          // Another device changed the list: add its types; for the same name, the newer list wins.
+          (Array.isArray(data.items) ? data.items : []).forEach(r => {
+            if (!r || !String(r.name || "").trim()) return;
+            const l = findLibByName(r.name);
+            if (!l) upsertLibItem(r.name, r.weightPer100, r.ratePer100);
+            else if (remoteTs > localTs) { l.weightPer100 = parseFloat(r.weightPer100) || 0; l.ratePer100 = parseFloat(r.ratePer100) || 0; }
+          });
+          merged = true;
+          saveNugLibrary(false);
+          renderNugLibrary();
+        }
+      }
+
+      const needPush = merged || localTs > pushedTs || (!data && nugLibrary.length);
+      if (needPush) {
+        const ts = new Date().toISOString();
+        const { error: upErr } = await sb.from("nug_library").upsert({ user_id: uid, items: nugLibrary, updated_at: ts }, { onConflict: "user_id" });
+        if (upErr) throw upErr;
+        try { localStorage.setItem(STORAGE_KEY_LIB_UPDATED, ts); localStorage.setItem(pushedKey, ts); } catch (_) {}
+      }
+    }
+
+    function cloudMsg(text) {
+      const el = document.getElementById("cloud-msg");
+      if (el) el.textContent = text;
+    }
+
+    function cloudCreds() {
+      const email = document.getElementById("cloud-email").value.trim();
+      const password = document.getElementById("cloud-password").value;
+      if (!email || !email.includes("@")) { cloudMsg("Enter your email."); return null; }
+      if (!password || password.length < 6) { cloudMsg("Password must be at least 6 characters."); return null; }
+      return { email, password };
+    }
+
+    function initCloud() {
+      document.getElementById("btn-cloud").addEventListener("click", () => {
+        updateCloudUI();
+        if (sbUser && lastSyncStatus.text) setSyncStatus(lastSyncStatus.text, lastSyncStatus.cls);
+        openModal("modal-cloud");
       });
 
-      if (!filteredHistory.length) {
-        container.innerHTML = `<p style="text-align: center; color: var(--text-muted); padding: 20px;">No transactions match your active filters.</p>`;
+      if (!window.supabase || !window.supabase.createClient) {
+        sb = null;
+        updateCloudUI();
         return;
       }
-
-      container.style.display = "grid";
-      container.style.gridTemplateColumns = "repeat(auto-fill, minmax(280px, 1fr))";
-      container.style.gap = "16px";
-      container.innerHTML = "";
-      
-      filteredHistory.forEach(item => {
-        const curr = item.currency || item.state?.currency || "Rs.";
-        const cost = (item.grandTotalCost || 0).toFixed(2);
-        const div = document.createElement("div");
-        div.className = "history-item card";
-        div.style.padding = "16px";
-        div.style.margin = "0";
-        div.style.display = "flex";
-        div.style.flexDirection = "column";
-        div.style.gap = "12px";
-
-        const imgSrc = (item.state?.images && item.state.images.length > 0) ? item.state.images[0] : '';
-        const imgHtml = imgSrc ? `<div style="width:100%; height:180px; border-radius:8px; overflow:hidden; margin-bottom:8px;"><img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;"></div>` : `<div style="width:100%; height:180px; border-radius:8px; background:#1e293b; display:flex; align-items:center; justify-content:center; color:#475569; margin-bottom:8px;"><i class="fa-solid fa-image fa-3x"></i></div>`;
-
-        div.innerHTML = `
-          ${imgHtml}
-          <div style="flex-grow: 1;">
-            <h4 style="font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-bottom:4px;">${item.name || 'Untitled Set'}</h4>
-            <p style="font-size: 0.85rem; color: var(--accent-gold); margin-bottom:8px;">Invoice #${item.invoice || '---'}</p>
-            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom:4px;">
-              ${item.customerName ? '<i class="fa-solid fa-user"></i> ' + item.customerName + '<br>' : ''}
-              <i class="fa-solid fa-layer-group"></i> Sets: <strong>${item.totalSets || 0}</strong> • <i class="fa-regular fa-calendar"></i> ${item.timestamp ? item.timestamp.split('T')[0] : ''}
-            </p>
-            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
-              <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Cost</span>
-              <div style="font-weight: 800; font-size: 1.2rem; color: var(--accent-gold);">${curr} ${cost}</div>
-            </div>
-          </div>
-          
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
-            <button class="btn btn-primary btn-sm" onclick="loadSetFromHistory('${item.id}')" title="Load & Edit">
-              <i class="fa-solid fa-folder-open"></i> Edit
-            </button>
-            <button class="btn btn-outline-gold btn-sm" onclick="copySetFromHistory('${item.id}')" title="Duplicate">
-              <i class="fa-solid fa-copy"></i> Copy
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="viewSetFromHistory('${item.id}')" title="View Only">
-              <i class="fa-solid fa-eye"></i> View
-            </button>
-            <button class="btn btn-danger btn-sm" onclick="deleteSetFromHistory('${item.id}')" title="Delete">
-              <i class="fa-solid fa-trash-can"></i> Delete
-            </button>
-          </div>
-        `;
-        container.appendChild(div);
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
-    }
 
-    async function loadSetFromHistory(id) {
-      const history = await getSavedHistory();
-      const item = history.find(h => h.id === id);
-      if (item) {
-        appState = JSON.parse(JSON.stringify(item.state));
-        populateFormFromState();
-        closeModal("modal-history");
-        showToast(`Loaded set: ${item.name}`, "success");
-      }
-    }
+      sb.auth.onAuthStateChange((event, session) => {
+        const u = session ? session.user : null;
+        const changed = (u && u.id) !== (sbUser && sbUser.id);
+        sbUser = u;
+        updateCloudUI();
+        // Don't await Supabase calls inside this callback (it can deadlock) — defer them.
+        if (u && changed) setTimeout(cloudSync, 0);
+        if (event === "PASSWORD_RECOVERY") {
+          setTimeout(async () => {
+            const pw = prompt("Enter a new password (at least 6 characters):");
+            if (pw && pw.length >= 6) {
+              const { error } = await sb.auth.updateUser({ password: pw });
+              showToast(error ? "Password not changed: " + error.message : "Password updated.", error ? "danger" : "success");
+            }
+          }, 0);
+        }
+      });
 
-    async function copySetFromHistory(id) {
-      const history = await getSavedHistory();
-      const item = history.find(h => h.id === id);
-      if (item && item.state) {
-        appState = JSON.parse(JSON.stringify(item.state));
-        appState.setName = (appState.setName || "Untitled") + " (Copy)";
-        appState.invoiceNum = ""; // clear invoice for copy
-        populateFormFromState();
-        closeModal("modal-history");
-        showToast("Set copied successfully! Edit and save as new.", "success");
-      }
-    }
+      document.getElementById("btn-cloud-login").addEventListener("click", async () => {
+        const c = cloudCreds(); if (!c) return;
+        cloudMsg("Logging in…");
+        const { error } = await sb.auth.signInWithPassword(c);
+        if (error) {
+          cloudMsg(/confirm/i.test(error.message) ? "Please open the confirmation email first, then log in." : "Login failed: " + error.message);
+          return;
+        }
+        cloudMsg("");
+        document.getElementById("cloud-password").value = "";
+        closeModal("modal-cloud");
+        showToast("Logged in — uploading your items…", "success");
+      });
 
-    async function viewSetFromHistory(id) {
-      await loadSetFromHistory(id);
-      switchTab("tab-results");
-    }
+      document.getElementById("btn-cloud-signup").addEventListener("click", async () => {
+        const c = cloudCreds(); if (!c) return;
+        cloudMsg("Creating account…");
+        const { data, error } = await sb.auth.signUp({ email: c.email, password: c.password, options: { emailRedirectTo: location.origin + location.pathname } });
+        if (error) { cloudMsg("Could not create account: " + error.message); return; }
+        if (!data.session) cloudMsg("Account created. Open the confirmation email we sent to " + c.email + ", then come back and tap Log In.");
+        else { cloudMsg(""); showToast("Account created — syncing…", "success"); }
+      });
 
-    async function deleteSetFromHistory(id) {
-      if(!confirm("Are you sure you want to delete this set?")) return;
-      await db.history.delete(id);
-      renderHistoryModal();
-      showToast("Deleted set from history.", "info");
+      document.getElementById("btn-cloud-reset").addEventListener("click", async () => {
+        const email = document.getElementById("cloud-email").value.trim();
+        if (!email.includes("@")) { cloudMsg("Type your email above first."); return; }
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+        cloudMsg(error ? "Could not send: " + error.message : "Password reset email sent to " + email + ".");
+      });
+
+      document.getElementById("btn-cloud-sync-now").addEventListener("click", () => cloudSync());
+
+      document.getElementById("btn-cloud-logout").addEventListener("click", async () => {
+        await cloudSync(); // upload anything pending first
+        await sb.auth.signOut();
+        closeModal("modal-cloud");
+        showToast("Logged out. Your items stay on this phone.", "info");
+        renderGallery();
+      });
+
+      window.addEventListener("online", () => scheduleCloudSync(500));
+      setInterval(() => { if (document.visibilityState === "visible") cloudSync(); }, 60000);
     }
 
     /* ==========================================================================
@@ -3193,12 +3680,13 @@
     const STORAGE_KEY_LAST_BACKUP = "nug_calc_last_backup";
 
     async function buildFullBackup() {
+      await flushAutosave();
       return {
         app: "nug-calculator",
-        backupVersion: 2,
+        backupVersion: 3,
         exportedAt: new Date().toISOString(),
         history: await getSavedHistory(),
-        current: JSON.parse(JSON.stringify(appState)),
+        current: currentItemId ? null : JSON.parse(JSON.stringify(appState)),
         nugLibrary: JSON.parse(JSON.stringify(nugLibrary))
       };
     }
@@ -3306,13 +3794,11 @@
           if (data && data.app === "nug-calculator" && Array.isArray(data.history)) {
             await restoreFullBackup(data);
           } else if (isValidSetState(data)) {
-            // Older single-set export: open it as the current set.
-            appState = normalizeSetState(data);
-            populateFormFromState();
-            saveDraftToLocalStorage();
-            closeModal("modal-history");
+            // Older single-set export: add it as a new item and open it.
+            const id = await addItemFromState(data);
             closeModal("modal-drive");
-            showToast("Set imported and opened.", "success");
+            showToast("Set imported as a new item.", "success");
+            openItem(id);
           } else {
             showToast("This file is not a Nug Calculator backup.", "danger");
           }
@@ -3325,19 +3811,64 @@
       reader.readAsText(file);
     }
 
+    async function addItemFromState(rawState) {
+      const st = normalizeSetState(JSON.parse(JSON.stringify(rawState)));
+      const now = new Date().toISOString();
+      const totals = computeTotals(st);
+      const id = newItemId();
+      await db.history.put({
+        id, createdAt: now, timestamp: now,
+        name: st.setName || "", invoice: st.invoiceNum || "", customerName: st.customerName || "",
+        currency: st.currency || "Rs.", totalSets: totals.totalSets, grandTotalCost: totals.grandTotalCost,
+        thumb: await makeThumb(st.images[0]), state: st, deleted: false, dirty: true
+      });
+      return id;
+    }
+
     async function restoreFullBackup(data) {
-      // 1. Saved sets: add any that aren't here; keep the newer copy when both exist.
-      const existing = await getSavedHistory();
-      const byId = new Map(existing.map(h => [h.id, h]));
-      let addedSets = 0, updatedSets = 0;
+      // 1. Items: add any that aren't here (or were deleted here); keep the newer copy when both exist.
+      const all = await getAllItemsRaw();
+      const byId = new Map(all.map(h => [h.id, h]));
+      let added = 0, updated = 0;
       for (const item of data.history) {
         if (!item || !item.id || !isValidSetState(item.state)) continue;
         const mine = byId.get(item.id);
-        if (!mine) { await db.history.put(item); addedSets++; }
-        else if (String(item.timestamp || "") > String(mine.timestamp || "")) { await db.history.put(item); updatedSets++; }
+        const st = normalizeSetState(item.state);
+        const totals = computeTotals(st);
+        const rec = {
+          id: item.id,
+          createdAt: item.createdAt || item.timestamp || new Date().toISOString(),
+          timestamp: item.timestamp || new Date().toISOString(),
+          name: st.setName || item.name || "",
+          invoice: st.invoiceNum || "",
+          customerName: st.customerName || "",
+          currency: st.currency || "Rs.",
+          totalSets: totals.totalSets,
+          grandTotalCost: totals.grandTotalCost,
+          thumb: item.thumb || await makeThumb(st.images[0]),
+          state: st,
+          deleted: false,
+          dirty: true
+        };
+        if (!mine || mine.deleted) {
+          if (mine) rec.timestamp = new Date().toISOString(); // un-delete wins over the old delete
+          await db.history.put(rec); added++;
+        } else if (String(rec.timestamp) > String(mine.timestamp || "")) {
+          await db.history.put(rec); updated++;
+        }
       }
 
-      // 2. Saved nug types: add new names, keep this phone's values for names it already has.
+      // 2. The set that was open when the backup was made (older backups): add it if it isn't already an item.
+      if (isValidSetState(data.current) && !stateIsEmpty(data.current)) {
+        const json = JSON.stringify(normalizeSetState(data.current));
+        const items = await getSavedHistory();
+        if (!items.some(i => JSON.stringify(normalizeSetState(i.state)) === json)) {
+          await addItemFromState(data.current);
+          added++;
+        }
+      }
+
+      // 3. Saved nug types: add new names, keep this phone's values for names it already has.
       let addedTypes = 0;
       (Array.isArray(data.nugLibrary) ? data.nugLibrary : []).forEach(l => {
         if (!l || !String(l.name || "").trim() || findLibByName(l.name)) return;
@@ -3346,128 +3877,14 @@
       });
       if (addedTypes) { saveNugLibrary(); renderNugLibrary(); }
 
-      // 3. The set that was open: replace the current one only if it's empty, or the user agrees.
-      let openedCurrent = false;
-      if (isValidSetState(data.current) && !stateIsEmpty(data.current)) {
-        if (stateIsEmpty(appState) || confirm(`Open the set from the backup ("${data.current.setName || "Untitled"}")?\nYour current unsaved screen will be replaced.`)) {
-          appState = normalizeSetState(data.current);
-          populateFormFromState();
-          await saveDraftToLocalStorage();
-          openedCurrent = true;
-        }
-      }
-
-      renderHistoryModal();
       closeModal("modal-drive");
-      let msg = `Restored: ${addedSets} new sets`;
-      if (updatedSets) msg += `, ${updatedSets} updated`;
+      await renderGallery();
+      scheduleCloudSync(500);
+      let msg = `Restored: ${added} new items`;
+      if (updated) msg += `, ${updated} updated`;
       msg += `, ${addedTypes} new nug types`;
-      if (openedCurrent) msg += ", open set loaded";
       showToast(msg + ".", "success");
     }
-
-    function resetAll() {
-      if (confirm("Are you sure you want to clear all fields?")) {
-        appState = {
-          setName: "",
-          invoiceNum: "",
-          date: new Date().toISOString().split('T')[0],
-          customerName: "",
-          notes: "",
-          currency: appState.currency || "Rs.",
-          globalLaborCostPer100: 0,
-          wastePercent: 0,
-          nugTypes: [],
-          colors: [],
-          images: []
-        };
-        saveDraftToLocalStorage();
-        populateFormFromState();
-        showToast("All fields cleared.", "info");
-      }
-    }
-
-    /* ==========================================================================
-       GOOGLE DRIVE INTEGRATION & MOCK FALLBACK
-       ========================================================================== */
-    /* ==========================================================================
-       GMAIL LOGIN & GOOGLE DRIVE INTEGRATION
-       ========================================================================== */
-    function initGmailAuth() {
-      const savedEmail = localStorage.getItem("nug_user_gmail");
-      if (savedEmail) {
-        setGmailLoggedInState(savedEmail);
-      }
-
-      const btnConnect = document.getElementById("btn-connect-gmail");
-      const btnDisconnect = document.getElementById("btn-disconnect-gmail");
-      const dropSelect = document.getElementById("hist-select-dropdown");
-      const filterSetName = document.getElementById("hist-filter-set-name");
-      const filterInvoice = document.getElementById("hist-filter-invoice");
-      const filterDate = document.getElementById("hist-filter-date");
-      const btnClearFilters = document.getElementById("btn-clear-hist-filters");
-
-      if (btnConnect) {
-        btnConnect.addEventListener("click", () => {
-          const emailInput = document.getElementById("user-gmail-input").value.trim();
-          if (emailInput && emailInput.includes("@")) {
-            localStorage.setItem("nug_user_gmail", emailInput);
-            setGmailLoggedInState(emailInput);
-            showToast(`Signed in as ${emailInput}`, "success");
-          } else {
-            showToast("Please enter a valid Gmail address.", "danger");
-          }
-        });
-      }
-
-      if (btnDisconnect) {
-        btnDisconnect.addEventListener("click", () => {
-          localStorage.removeItem("nug_user_gmail");
-          setGmailLoggedOutState();
-          showToast("Gmail disconnected.", "info");
-        });
-      }
-
-      // Bind filter inputs
-      [dropSelect, filterSetName, filterInvoice, filterDate].forEach(el => {
-        if (el) el.addEventListener("change", renderHistoryModal);
-        if (el && el.tagName === 'INPUT') el.addEventListener("input", renderHistoryModal);
-      });
-
-      if (btnClearFilters) {
-        btnClearFilters.addEventListener("click", () => {
-          if (dropSelect) dropSelect.value = "";
-          if (filterSetName) filterSetName.value = "";
-          if (filterInvoice) filterInvoice.value = "";
-          if (filterDate) filterDate.value = "";
-          renderHistoryModal();
-        });
-      }
-    }
-
-    function setGmailLoggedInState(email) {
-      const loggedOutDiv = document.getElementById("google-logged-out");
-      const loggedInDiv = document.getElementById("google-logged-in");
-      const displayEmail = document.getElementById("user-display-email");
-      const avatarInitials = document.getElementById("user-avatar-initials");
-
-      if (loggedOutDiv) loggedOutDiv.style.display = "none";
-      if (loggedInDiv) loggedInDiv.style.display = "flex";
-      if (displayEmail) displayEmail.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${email}`;
-      if (avatarInitials) avatarInitials.textContent = email.charAt(0).toUpperCase();
-    }
-
-    function setGmailLoggedOutState() {
-      const loggedOutDiv = document.getElementById("google-logged-out");
-      const loggedInDiv = document.getElementById("google-logged-in");
-      if (loggedOutDiv) loggedOutDiv.style.display = "flex";
-      if (loggedInDiv) loggedInDiv.style.display = "none";
-    }
-
-    // Auto init auth on load
-    document.addEventListener("DOMContentLoaded", () => {
-      initGmailAuth();
-    });
 
     /* ==========================================================================
        GATE PASS IMPLEMENTATION (COLOR-WISE NUGGET TYPE BREAKDOWN MATRIX - NO PRICES)
