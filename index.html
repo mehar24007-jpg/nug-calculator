@@ -536,7 +536,8 @@
     .autosave-note.saving { color: var(--text-muted); }
 
     /* Saved colors + swatches */
-    .clib-add { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .clib-add { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .clib-add #btn-clib-add { justify-content: center; }
     .clib-add #clib-new-name { grid-column: 1 / -1; }
     .swatch-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .swatch-edit .sw-slot { position: relative; width: 34px; height: 34px; }
@@ -546,6 +547,17 @@
     .swatch-edit .sw-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: none; background: var(--danger); color: #fff; font-size: 10px; line-height: 18px; padding: 0; cursor: pointer; }
     .swatch-edit .sw-plus { width: 34px; height: 34px; border-radius: 50%; border: 1px dashed var(--border-gold); background: transparent; color: var(--accent-gold); cursor: pointer; font-size: 0.8rem; }
     .clib-list { display: flex; flex-direction: column; gap: 8px; }
+    .swatch-edit { flex-direction: column; align-items: stretch; }
+    .sw-row { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+    .swatch-edit .sw-slot { display: inline-flex; flex-direction: column; align-items: center; width: auto; height: auto; min-width: 34px; }
+    .sw-name { font-size: 0.62rem; color: var(--text-secondary); max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+    .swatch-edit .sw-plus.on { background: rgba(245,158,11,0.15); }
+    .shade-picker { margin-top: 8px; padding: 8px; border: 1px solid var(--border-gold); border-radius: var(--radius-sm); background: rgba(245,158,11,0.05); }
+    .shade-picker-title { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
+    .shade-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .shade-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 999px; padding: 6px 10px; font-size: 0.8rem; cursor: pointer; }
+    .shade-chip:hover { border-color: var(--border-gold); }
+    .shade-chip.custom { color: var(--text-secondary); border-style: dashed; }
     .clib-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; background: var(--bg-input); }
     .clib-row .clib-top { display: flex; gap: 8px; align-items: center; grid-column: 1 / -1; }
     .clib-row .clib-top input { flex: 1; }
@@ -2680,41 +2692,106 @@
       return key ? colorLibrary.find(c => c.name.trim().toLowerCase() === key) : null;
     }
 
-    function upsertColorLib(name, hexes) {
+    function upsertColorLib(name, hexes, parts) {
       name = String(name || "").trim();
       if (!name) return null;
       hexes = (hexes && hexes.length ? hexes : ["#f59e0b"]).slice(0, MAX_SHADES);
+      parts = hexes.map((_, i) => (parts && parts[i]) || "");
       const ex = findColorByName(name);
-      if (ex) { ex.hexes = hexes.slice(); return { item: ex, updated: true }; }
-      const item = { id: "clr-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, hexes: hexes.slice() };
+      if (ex) { ex.hexes = hexes.slice(); ex.parts = parts; return { item: ex, updated: true }; }
+      const item = { id: "clr-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, hexes: hexes.slice(), parts };
       colorLibrary.push(item);
       return { item, updated: false };
     }
 
-    // Small editor: one circle per shade, × to remove, + to add (max 5).
-    function swatchEditorHtml(hexes, scope) {
-      let html = hexes.map((h, i) => `
-        <span class="sw-slot">
-          <input type="color" value="${escapeHtml(h)}" oninput="swatchSet('${scope}', ${i}, this.value)" title="Shade ${i + 1}">
+    // Shade editor: one circle per shade (tap to change), × to remove,
+    // + opens a list of your saved colors to add as the next shade (max 5).
+    let shadePickerScope = null;
+    let clibNewParts = [""];
+    let clibNewUntouched = true; // the starting orange circle hasn't been chosen yet
+
+    function colorParts(c) {
+      const h = colorHexes(c);
+      const p = Array.isArray(c && c.parts) ? c.parts : [];
+      return h.map((_, i) => p[i] || "");
+    }
+
+    function swatchEditorHtml(hexes, scope, parts) {
+      parts = parts || hexes.map(() => "");
+      let html = `<div class="sw-row">` + hexes.map((h, i) => `
+        <span class="sw-slot" title="${escapeHtml(parts[i] || "Tap to choose color")}">
+          <input type="color" value="${escapeHtml(h)}" oninput="swatchSet('${scope}', ${i}, this.value)">
           ${hexes.length > 1 ? `<button type="button" class="sw-x" onclick="swatchRemove('${scope}', ${i})" title="Remove shade">×</button>` : ""}
+          ${parts[i] ? `<span class="sw-name">${escapeHtml(parts[i])}</span>` : ""}
         </span>`).join("");
-      if (hexes.length < MAX_SHADES) html += `<button type="button" class="sw-plus" onclick="swatchAdd('${scope}')" title="Add another shade (multi color)"><i class="fa-solid fa-plus"></i></button>`;
+      if (hexes.length < MAX_SHADES) {
+        html += `<button type="button" class="sw-plus${shadePickerScope === scope ? " on" : ""}" onclick="toggleShadePicker('${scope}')" title="Add a shade from your saved colors (multi color)"><i class="fa-solid fa-plus"></i></button>`;
+      }
       if (hexes.length > 1) html += `<span class="multi-tag">MULTI ${hexes.length}</span>`;
+      html += `</div>`;
+
+      if (shadePickerScope === scope && hexes.length < MAX_SHADES) {
+        const singles = colorLibrary
+          .filter(c => colorHexes(c).length === 1 && c.id !== scope)
+          .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+        html += `<div class="shade-picker">
+          <div class="shade-picker-title">Tap a saved color to add it${hexes.length > 1 ? "" : " (makes this a multi color)"}:</div>
+          <div class="shade-chips">
+            ${singles.map(c => `<button type="button" class="shade-chip" onclick="addShadeFromSaved('${scope}', '${c.id}')">${swatchHtml(colorHexes(c))} ${escapeHtml(c.name)}</button>`).join("")}
+            <button type="button" class="shade-chip custom" onclick="swatchAdd('${scope}')"><i class="fa-solid fa-eye-dropper"></i> Other color</button>
+          </div>
+          ${singles.length ? "" : `<div class="shade-picker-title">No single saved colors yet — save them first (like Anari, Black), then build the multi from them.</div>`}
+        </div>`;
+      }
       return html;
     }
 
     function swatchTarget(scope) {
-      if (scope === "new") return { get: () => clibNewHexes, set: v => { clibNewHexes = v; }, rerender: renderNewSwatches };
+      if (scope === "new") return {
+        get: () => clibNewHexes, parts: () => clibNewParts,
+        set: (h, p) => { clibNewHexes = h; clibNewParts = p; clibNewUntouched = false; },
+        rerender: renderNewSwatches
+      };
       const c = colorLibrary.find(x => x.id === scope);
       return c ? {
-        get: () => colorHexes(c),
-        set: v => { c.hexes = v; saveColorLibrary(); },
+        get: () => colorHexes(c), parts: () => colorParts(c),
+        set: (h, p) => { c.hexes = h; c.parts = p; saveColorLibrary(); },
         rerender: renderColorLibrary
       } : null;
     }
+
+    function toggleShadePicker(scope) {
+      shadePickerScope = shadePickerScope === scope ? null : scope;
+      const t = swatchTarget(scope);
+      if (t) t.rerender();
+    }
+
+    function addShadeFromSaved(scope, libId) {
+      const t = swatchTarget(scope);
+      const lib = colorLibrary.find(x => x.id === libId);
+      if (!t || !lib) return;
+      let h = t.get().slice(), p = t.parts().slice();
+      // In the add form, the first saved color replaces the untouched starting circle.
+      if (scope === "new" && clibNewUntouched && h.length === 1 && !p[0]) { h = []; p = []; }
+      if (h.length >= MAX_SHADES) return;
+      h.push(colorHexes(lib)[0]);
+      p.push(lib.name);
+      t.set(h, p);
+      if (h.length >= MAX_SHADES) shadePickerScope = null;
+      if (scope === "new") {
+        const nameEl = document.getElementById("clib-new-name");
+        if (!nameEl.value.trim() && h.length > 1) nameEl.value = "Multi";
+      }
+      t.rerender();
+    }
+
     function swatchSet(scope, i, val) {
       const t = swatchTarget(scope); if (!t) return;
-      const h = t.get().slice(); h[i] = val; t.set(h);
+      const h = t.get().slice(), p = t.parts().slice();
+      h[i] = val;
+      // Hand-picked shade no longer matches the saved color it came from.
+      if (p[i]) { const lib = findColorByName(p[i]); if (!lib || colorHexes(lib)[0] !== val) p[i] = ""; }
+      t.set(h, p);
       if (scope !== "new") {
         const sw = document.querySelector(`[data-clib-preview="${cssId(scope)}"]`);
         if (sw) sw.innerHTML = swatchHtml(h, true);
@@ -2722,28 +2799,37 @@
     }
     function swatchAdd(scope) {
       const t = swatchTarget(scope); if (!t) return;
-      const h = t.get().slice(); if (h.length >= MAX_SHADES) return;
-      h.push(h[h.length - 1] || "#f59e0b"); t.set(h); t.rerender();
+      const h = t.get().slice(), p = t.parts().slice();
+      if (h.length >= MAX_SHADES) return;
+      h.push(h[h.length - 1] || "#f59e0b"); p.push("");
+      t.set(h, p);
+      shadePickerScope = null;
+      t.rerender();
     }
     function swatchRemove(scope, i) {
       const t = swatchTarget(scope); if (!t) return;
-      const h = t.get().slice(); if (h.length <= 1) return;
-      h.splice(i, 1); t.set(h); t.rerender();
+      const h = t.get().slice(), p = t.parts().slice();
+      if (h.length <= 1) return;
+      h.splice(i, 1); p.splice(i, 1);
+      t.set(h, p); t.rerender();
     }
 
     function renderNewSwatches() {
-      document.getElementById("clib-new-swatches").innerHTML = swatchEditorHtml(clibNewHexes, "new");
+      document.getElementById("clib-new-swatches").innerHTML = swatchEditorHtml(clibNewHexes, "new", clibNewParts);
     }
 
     function addColorLibFromForm() {
       const nameEl = document.getElementById("clib-new-name");
-      const res = upsertColorLib(nameEl.value, clibNewHexes);
+      const res = upsertColorLib(nameEl.value, clibNewHexes, clibNewParts);
       if (!res) { showToast("Enter a color name first.", "danger"); nameEl.focus(); return; }
       saveColorLibrary();
       renderColorLibrary();
       showToast(`${res.updated ? "Updated" : "Saved"} "${escapeHtml(res.item.name)}"`, "success");
       nameEl.value = "";
       clibNewHexes = ["#f59e0b"];
+      clibNewParts = [""];
+      clibNewUntouched = true;
+      shadePickerScope = null;
       renderNewSwatches();
       nameEl.focus();
     }
@@ -2779,14 +2865,15 @@
             <input type="text" class="form-control" value="${escapeHtml(c.name)}" onchange="updateColorLibName('${c.id}', this.value)">
             <button class="btn btn-danger btn-sm btn-icon-only" onclick="removeColorLib('${c.id}')" title="Remove"><i class="fa-solid fa-trash-can"></i></button>
           </div>
-          <div class="swatch-edit">${swatchEditorHtml(colorHexes(c), c.id)}</div>
+          <div class="swatch-edit">${swatchEditorHtml(colorHexes(c), c.id, colorParts(c))}</div>
+          ${colorHexes(c).length === 1 && colorHexes(c)[0].toLowerCase() === "#f59e0b" ? `<div class="lib-hint" style="grid-column: 1 / -1; margin: 0;">Tap the circle to set the real shade.</div>` : ""}
         </div>`).join("");
     }
 
     function saveRowColorToLibrary(colId) {
       const col = appState.colors.find(c => c.id === colId);
       if (!col || !String(col.name || "").trim()) { showToast("Give this color a name first.", "danger"); return; }
-      const res = upsertColorLib(col.name, colorHexes(col));
+      const res = upsertColorLib(col.name, colorHexes(col), colorParts(col));
       saveColorLibrary();
       renderColorLibrary();
       showToast(`${res.updated ? "Updated saved" : "Saved"} color "${escapeHtml(res.item.name)}"`, "success");
@@ -2798,6 +2885,7 @@
       if (!col || !lib) return;
       col.name = lib.name;
       col.hexes = colorHexes(lib).slice();
+      col.parts = colorParts(lib);
       col.hex = col.hexes[0];
       renderColors();
       calculate();
@@ -3395,6 +3483,7 @@
               <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem;">
                 ${swatchHtmlPrint(colorHexes(col), 14)}
                 Color: ${escapeHtml(col.name)} <span style="color: #64748b; font-weight: 600;">(${colSets} Sets)</span>
+                ${colorParts(col).some(Boolean) && colorHexes(col).length > 1 ? `<div style="font-size: 0.75rem; color: #64748b; font-weight: 500; margin-top: 2px;">${colorParts(col).map(x => escapeHtml(x || "custom")).join(" + ")}</div>` : ""}
               </div>
               <div style="font-weight: 700; color: #b45309; font-size: 0.9rem;">
                 Color Cost: ${curr} ${colorTotalCost.toFixed(2)}
@@ -4190,8 +4279,8 @@
           (Array.isArray(data.colors) ? data.colors : []).forEach(r => {
             if (!r || !String(r.name || "").trim()) return;
             const l = findColorByName(r.name);
-            if (!l) upsertColorLib(r.name, colorHexes(r));
-            else if (remoteTs > localTs) l.hexes = colorHexes(r).slice();
+            if (!l) upsertColorLib(r.name, colorHexes(r), colorParts(r));
+            else if (remoteTs > localTs) { l.hexes = colorHexes(r).slice(); l.parts = colorParts(r); }
           });
           merged = true;
           saveNugLibrary(false);
@@ -4510,7 +4599,7 @@
       let addedColors = 0;
       (Array.isArray(data.colorLibrary) ? data.colorLibrary : []).forEach(c => {
         if (!c || !String(c.name || "").trim() || findColorByName(c.name)) return;
-        upsertColorLib(c.name, colorHexes(c));
+        upsertColorLib(c.name, colorHexes(c), colorParts(c));
         addedColors++;
       });
       if (addedColors) { saveColorLibrary(); renderColorLibrary(); }
