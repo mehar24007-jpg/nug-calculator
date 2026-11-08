@@ -26,9 +26,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Google Drive API & GIS Client -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="https://apis.google.com/js/api.js" async defer></script>
 
   <style>
     :root {
@@ -1083,8 +1080,8 @@
           <i class="fa-solid fa-id-card"></i> Gate Pass
         </button>
 
-        <button class="btn btn-outline-gold btn-sm" id="btn-drive-sync" title="Google Drive Cloud Sync">
-          <i class="fa-brands fa-google-drive"></i> Drive Sync
+        <button class="btn btn-outline-gold btn-sm" id="btn-drive-sync" title="Backup & Restore (Google Drive)">
+          <i class="fa-solid fa-shield-halved"></i> Backup
         </button>
 
         <button class="btn btn-primary btn-sm" id="btn-quick-save" title="Save current set">
@@ -1529,13 +1526,14 @@
       <div class="modal-body">
         <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
           <button class="btn btn-secondary btn-sm" id="btn-export-json">
-            <i class="fa-solid fa-download"></i> Export All JSON
+            <i class="fa-solid fa-download"></i> Full Backup
           </button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-json-input').click()">
-            <i class="fa-solid fa-upload"></i> Import JSON
+            <i class="fa-solid fa-upload"></i> Restore Backup
           </button>
-          <input type="file" id="import-json-input" accept=".json" style="display: none;">
+          <input type="file" id="import-json-input" accept=".json,application/json" style="display: none;">
         </div>
+        <p class="backup-status" style="font-size: 0.75rem; color: var(--text-muted); margin: -6px 0 14px;"></p>
 
         <!-- Filter Controls Bar -->
         <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px;">
@@ -1567,60 +1565,30 @@
   <div class="modal-overlay" id="modal-drive">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title"><i class="fa-brands fa-google-drive"></i> Google Drive & Gmail Sync</h3>
+        <h3 class="modal-title"><i class="fa-solid fa-shield-halved"></i> Backup & Restore</h3>
         <button class="btn btn-secondary btn-sm btn-icon-only" onclick="closeModal('modal-drive')">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">
-          Connect your Gmail account to save sets directly to Google Drive as editable JSON files or import existing sets.
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 8px;">
+          One backup file holds <strong>all saved sets</strong>, the <strong>set open right now</strong> and your <strong>saved nug types</strong>.
+          Keep it in Google Drive so you can restore on a new phone or after clearing the browser.
         </p>
-
-        <!-- Gmail Sign-in Box -->
-        <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
-          <div id="google-logged-out" style="display: flex; flex-direction: column; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <i class="fa-brands fa-google" style="font-size: 1.5rem; color: #4285F4;"></i>
-              <div>
-                <h4 style="font-size: 0.95rem; font-weight: 600;">Sign in with Gmail Account</h4>
-                <p style="font-size: 0.75rem; color: var(--text-muted);">Auto-sync quotes and transactions directly to your Google Drive.</p>
-              </div>
-            </div>
-            <div class="form-group" style="margin-top: 6px;">
-              <label for="user-gmail-input">Your Gmail Address</label>
-              <div class="input-group">
-                <input type="email" id="user-gmail-input" class="form-control" placeholder="user@gmail.com">
-                <button class="btn btn-primary btn-sm" id="btn-connect-gmail"><i class="fa-solid fa-right-to-bracket"></i> Login Gmail</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="google-logged-in" style="display: none; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div style="width: 38px; height: 38px; border-radius: 50%; background: var(--accent-gold-gradient); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #000;" id="user-avatar-initials">G</div>
-              <div>
-                <h4 style="font-size: 0.95rem; color: var(--text-main);" id="user-display-name">Gmail Connected</h4>
-                <p style="font-size: 0.75rem; color: var(--success);" id="user-display-email"><i class="fa-solid fa-circle-check"></i> connected@gmail.com</p>
-              </div>
-            </div>
-            <button class="btn btn-danger btn-sm" id="btn-disconnect-gmail"><i class="fa-solid fa-power-off"></i> Disconnect</button>
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label for="drive-client-id">Google Cloud OAuth Client ID (Optional)</label>
-          <input type="text" id="drive-client-id" class="form-control" placeholder="123456789-abc.apps.googleusercontent.com">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Enter your Client ID for live OAuth. Otherwise, integrated cloud backup mode will be used.</span>
-        </div>
+        <p class="backup-status" style="font-size: 0.8rem; color: var(--accent-gold); margin-bottom: 16px;"></p>
 
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <button class="btn btn-primary" id="btn-drive-save-cloud">
-            <i class="fa-solid fa-cloud-arrow-up"></i> Save Current Set to Google Drive
+            <i class="fa-brands fa-google-drive"></i> Save Backup to Google Drive / WhatsApp
+          </button>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: -4px;">Opens your phone's share menu — choose <strong>Drive</strong> (or Gmail / WhatsApp to yourself).</span>
+          <button class="btn btn-secondary" id="btn-backup-download">
+            <i class="fa-solid fa-download"></i> Download Backup to Phone
           </button>
           <button class="btn btn-outline-gold" id="btn-drive-load-cloud">
-            <i class="fa-solid fa-cloud-arrow-down"></i> Load / Import Set from Google Drive
+            <i class="fa-solid fa-clock-rotate-left"></i> Restore from Backup File
           </button>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: -4px;">Pick the backup file from Drive or Downloads. Restoring adds missing sets and nug types — it never deletes what's already here.</span>
         </div>
       </div>
     </div>
@@ -1768,16 +1736,84 @@
       initDropzone();
       initNugLibrary();
 
-      // Initialize Dexie DB
-      window.db = new Dexie("NugCalcDB");
-      db.version(1).stores({
-        history: 'id, timestamp, name, invoice',
-        draft: 'id'
-      });
-      
+      // Local database for the open draft and saved history (no external library needed).
+      window.db = await openAppDB();
+
       await loadDraftFromLocalStorage();
       renderAll();
+      updateBackupStatus();
     });
+
+    /* ==========================================================================
+       LOCAL DATABASE (IndexedDB, with localStorage fallback)
+       Uses the same "NugCalcDB" database name and store names the app used before,
+       so anything already saved on a device is kept.
+       ========================================================================== */
+    async function openAppDB() {
+      const STORES = ["history", "draft"];
+
+      function idbOpen(version) {
+        return new Promise((resolve, reject) => {
+          const req = version ? indexedDB.open("NugCalcDB", version) : indexedDB.open("NugCalcDB");
+          req.onupgradeneeded = () => {
+            const d = req.result;
+            STORES.forEach(s => { if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: "id" }); });
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+          req.onblocked = () => reject(new Error("blocked"));
+        });
+      }
+
+      function idbStore(idb, name) {
+        const run = (mode, fn) => new Promise((resolve, reject) => {
+          const tx = idb.transaction(name, mode);
+          const req = fn(tx.objectStore(name));
+          tx.oncomplete = () => resolve(req ? req.result : undefined);
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+        return {
+          put: obj => run("readwrite", s => s.put(obj)),
+          get: id => run("readonly", s => s.get(id)),
+          delete: id => run("readwrite", s => s.delete(id)),
+          toArray: () => run("readonly", s => s.getAll()),
+          clear: () => run("readwrite", s => s.clear())
+        };
+      }
+
+      function lsStore(name) {
+        const key = "nug_calc_store_" + name;
+        const read = () => { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch (_) { return {}; } };
+        const write = all => { localStorage.setItem(key, JSON.stringify(all)); };
+        return {
+          put: async obj => { const all = read(); all[obj.id] = obj; write(all); },
+          get: async id => read()[id],
+          delete: async id => { const all = read(); delete all[id]; write(all); },
+          toArray: async () => Object.values(read()),
+          clear: async () => write({})
+        };
+      }
+
+      try {
+        if (!window.indexedDB) throw new Error("no indexedDB");
+        let idb = await idbOpen();
+        if (!STORES.every(s => idb.objectStoreNames.contains(s))) {
+          const v = idb.version + 1;
+          idb.close();
+          idb = await idbOpen(v);
+        }
+        idb.onversionchange = () => idb.close();
+        const out = {};
+        STORES.forEach(s => out[s] = idbStore(idb, s));
+        return out;
+      } catch (err) {
+        console.warn("IndexedDB unavailable, using localStorage:", err);
+        const out = {};
+        STORES.forEach(s => out[s] = lsStore(s));
+        return out;
+      }
+    }
 
     /* ==========================================================================
        TAB NAVIGATION
@@ -1846,12 +1882,14 @@
       document.getElementById("btn-reset-all").addEventListener("click", resetAll);
 
       // JSON Export/Import
-      document.getElementById("btn-export-json").addEventListener("click", exportStateAsJSON);
+      document.getElementById("btn-export-json").addEventListener("click", () => exportFullBackup("download"));
       document.getElementById("import-json-input").addEventListener("change", importJSONFile);
 
       // Drive Modal Buttons
-      document.getElementById("btn-drive-save-cloud").addEventListener("click", handleDriveSave);
-      document.getElementById("btn-drive-load-cloud").addEventListener("click", handleDriveLoad);
+      document.getElementById("btn-drive-save-cloud").addEventListener("click", () => exportFullBackup("share"));
+      document.getElementById("btn-backup-download").addEventListener("click", () => exportFullBackup("download"));
+      document.getElementById("btn-drive-load-cloud").addEventListener("click", () => document.getElementById("import-json-input").click());
+      document.getElementById("btn-drive-sync").addEventListener("click", updateBackupStatus);
 
       // Export PDF & Sharing
       document.getElementById("btn-export-pdf").addEventListener("click", exportPDF);
@@ -2768,41 +2806,122 @@
       }
     }
 
-    function exportPDF() {
-      showToast("Generating PDF document...", "info");
-      const element = document.getElementById("report-preview");
+    /* ==========================================================================
+       PDF BUILDER
+       Renders the report at a fixed A4 desktop width (so phones don't squeeze it),
+       then splits it across as many A4 pages as needed, breaking between table
+       rows / sections instead of through the middle of text.
+       ========================================================================== */
+    const PDF_RENDER_WIDTH = 820;   // px — layout width used for the PDF
+    let pdfBusy = false;
 
+    async function buildPagedPDF(elementId) {
       const jsPdfObj = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      if (!jsPdfObj || typeof html2canvas === "undefined") throw new Error("PDF library not loaded");
+      if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (_) {} }
 
-      if (!jsPdfObj || typeof html2canvas === 'undefined') {
-        showToast("Opening mobile printable document view...", "info");
-        window.print();
-        return;
-      }
+      const source = document.getElementById(elementId);
+      let breaks = [];
+      let cloneHeight = 0;
 
-      const opt = {
+      const canvas = await html2canvas(source, {
         scale: 2,
         useCORS: true,
-        logging: false
-      };
+        logging: false,
+        backgroundColor: "#ffffff",
+        windowWidth: PDF_RENDER_WIDTH + 40,   // media queries see a desktop-width window
+        onclone: (doc) => {
+          const el = doc.getElementById(elementId);
+          // Make sure it's visible even if its tab/modal is hidden on screen.
+          let p = el;
+          while (p && p !== doc.body) {
+            if (doc.defaultView.getComputedStyle(p).display === "none") p.style.setProperty("display", "block", "important");
+            p = p.parentElement;
+          }
+          el.style.setProperty("width", PDF_RENDER_WIDTH + "px", "important");
+          el.style.setProperty("max-width", PDF_RENDER_WIDTH + "px", "important");
+          el.style.setProperty("padding", "32px", "important");
+          el.style.setProperty("margin", "0", "important");
+          el.style.setProperty("box-shadow", "none", "important");
+          el.style.setProperty("border-radius", "0", "important");
+          el.querySelectorAll(".table-container").forEach(t => t.style.setProperty("overflow", "visible", "important"));
+          el.querySelectorAll(".no-print, .btn").forEach(n => n.style.setProperty("display", "none", "important"));
 
-      html2canvas(element, opt).then(canvas => {
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jsPdfObj("p", "mm", "a4");
-
-        const imgWidth = 210;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-        pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-        const filename = `${(appState.setName || "Nug_Cost_Report").replace(/\s+/g, '_')}_${appState.invoiceNum || '000'}.pdf`;
-        
-        // Trigger Native Mobile Share Sheet (WhatsApp, Social Apps, etc.) if available
-        sharePDFFile(pdf, filename, appState.setName || "Nug Cost Report");
-      }).catch(err => {
-        console.error(err);
-        showToast("Opening browser print dialog...", "info");
-        window.print();
+          // Collect safe places to start a new page: top of every table row and section block.
+          const top = el.getBoundingClientRect().top;
+          cloneHeight = el.getBoundingClientRect().height;
+          el.querySelectorAll("tr, h1, h2, h3, h4, p, img, .report-header, .report-grid, .report-grid > *, :scope > *, :scope > * > *").forEach(n => {
+            const r = n.getBoundingClientRect();
+            if (r.height > 0) breaks.push(r.top - top);
+          });
+        }
       });
+
+      const pdf = new jsPdfObj("p", "mm", "a4");
+      const margin = 8;                                  // mm
+      const pageW = 210 - margin * 2;
+      const pageH = 297 - margin * 2;
+      const pxPerCss = canvas.height / (cloneHeight || canvas.height / 2);
+      const pagePx = Math.floor(canvas.width * (pageH / pageW)); // canvas px that fit on one page
+      breaks = breaks.map(b => Math.round(b * pxPerCss)).filter(b => b > 0 && b < canvas.height).sort((a, b) => a - b);
+
+      let y = 0, page = 0;
+      while (y < canvas.height - 2) {
+        let end = Math.min(y + pagePx, canvas.height);
+        if (end < canvas.height) {
+          // Latest safe break that still leaves the page at least 40% full.
+          const cands = breaks.filter(b => b > y + pagePx * 0.4 && b <= end);
+          if (cands.length) end = cands[cands.length - 1];
+        }
+        const sliceH = end - y;
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = sliceH;
+        const ctx = slice.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+        if (page > 0) pdf.addPage();
+        const hMm = sliceH * pageW / canvas.width;
+        pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, pageW, hMm);
+        page++;
+        y = end;
+      }
+
+      // Page numbers
+      const total = pdf.getNumberOfPages();
+      if (total > 1) {
+        pdf.setFontSize(8);
+        pdf.setTextColor(120);
+        for (let i = 1; i <= total; i++) {
+          pdf.setPage(i);
+          pdf.text(`Page ${i} of ${total}`, 210 - margin, 297 - 3, { align: "right" });
+        }
+      }
+      return pdf;
+    }
+
+    function safeFilePart(str, fallback) {
+      return (String(str || "").trim() || fallback).replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, "_");
+    }
+
+    async function exportPDF() {
+      if (pdfBusy) return;
+      pdfBusy = true;
+      showToast("Generating PDF document...", "info");
+      try {
+        calculate(); // make sure the report shows the latest numbers
+        const pdf = await buildPagedPDF("report-preview");
+        const filename = `${safeFilePart(appState.setName, "Nug_Cost_Report")}_${safeFilePart(appState.invoiceNum, "000")}.pdf`;
+        sharePDFFile(pdf, filename, appState.setName || "Nug Cost Report");
+      } catch (err) {
+        console.error(err);
+        showToast("PDF maker didn't load (check internet). Opening print — choose 'Save as PDF'.", "danger");
+        setTimeout(() => window.print(), 600);
+      } finally {
+        pdfBusy = false;
+      }
     }
 
     function shareWhatsApp() {
@@ -2849,11 +2968,17 @@
     const STORAGE_KEY_HISTORY = "nug_calc_saved_history";
 
     async function saveDraftToLocalStorage() {
-      await db.draft.put({ id: 'current', state: JSON.parse(JSON.stringify(appState)) });
+      if (!window.db) return;
+      try {
+        await db.draft.put({ id: 'current', state: JSON.parse(JSON.stringify(appState)) });
+      } catch (err) {
+        console.error("Draft save failed:", err);
+      }
     }
 
     async function loadDraftFromLocalStorage() {
-      const draft = await db.draft.get('current');
+      let draft = null;
+      try { draft = await db.draft.get('current'); } catch (err) { console.error("Draft load failed:", err); }
       if (draft && draft.state) {
         try {
           if (draft.state.setName === "Royal Crown Nugget Collection") {
@@ -2907,14 +3032,22 @@
         grandTotalCost,
         state: JSON.parse(JSON.stringify(appState))
       };
-      await db.history.put(setEntry);
+      try {
+        await db.history.put(setEntry);
+      } catch (err) {
+        console.error(err);
+        showToast("Could not save — phone storage may be full. Take a backup and remove old sets/photos.", "danger");
+        return;
+      }
       showToast("Transaction saved to in-app history!", "success");
       renderHistoryModal();
     }
 
     async function getSavedHistory() {
-      const all = await db.history.reverse().sortBy('timestamp');
-      return all;
+      let all = [];
+      try { all = await db.history.toArray(); } catch (err) { console.error("History load failed:", err); }
+      // Newest first
+      return all.sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
     }
 
     async function renderHistoryModal() {
@@ -3052,36 +3185,185 @@
       showToast("Deleted set from history.", "info");
     }
 
-    function exportStateAsJSON() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `NugCostCalc_${appState.invoiceNum || 'export'}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
+    /* ==========================================================================
+       FULL BACKUP & RESTORE
+       One file holds everything: all saved sets (history), the set currently open,
+       and the saved nug types list. Restoring merges — nothing on the phone is lost.
+       ========================================================================== */
+    const STORAGE_KEY_LAST_BACKUP = "nug_calc_last_backup";
+
+    async function buildFullBackup() {
+      return {
+        app: "nug-calculator",
+        backupVersion: 2,
+        exportedAt: new Date().toISOString(),
+        history: await getSavedHistory(),
+        current: JSON.parse(JSON.stringify(appState)),
+        nugLibrary: JSON.parse(JSON.stringify(nugLibrary))
+      };
+    }
+
+    function backupFileName() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      return `NugCalc_Backup_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
+    // mode "download": save to phone. mode "share": open the share sheet (Google Drive, WhatsApp, Gmail…).
+    async function exportFullBackup(mode = "download") {
+      let data;
+      try {
+        data = await buildFullBackup();
+      } catch (err) {
+        console.error(err);
+        showToast("Could not read saved data for backup.", "danger");
+        return;
+      }
+      const filename = backupFileName();
+      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      const markDone = () => {
+        try { localStorage.setItem(STORAGE_KEY_LAST_BACKUP, data.exportedAt); } catch (_) {}
+        updateBackupStatus();
+      };
+      const summary = `${data.history.length} saved sets, ${data.nugLibrary.length} nug types`;
+
+      if (mode === "share") {
+        const file = new File([blob], filename, { type: "application/json" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ title: "Nug Calculator Backup", files: [file] });
+            markDone();
+            showToast(`Backup shared (${summary}).`, "success");
+          } catch (err) {
+            if (err && err.name !== "AbortError") {
+              downloadBlob(blob, filename);
+              markDone();
+              showToast(`Sharing not available — backup downloaded instead (${summary}).`, "info");
+            }
+          }
+          return;
+        }
+        showToast("This browser can't share files — backup downloaded. Upload it to Google Drive from your Downloads.", "info");
+      }
+
+      downloadBlob(blob, filename);
+      markDone();
+      showToast(`Backup saved to Downloads (${summary}).`, "success");
+    }
+
+    function updateBackupStatus() {
+      let last = null;
+      try { last = localStorage.getItem(STORAGE_KEY_LAST_BACKUP); } catch (_) {}
+      const text = last
+        ? "Last backup: " + new Date(last).toLocaleString()
+        : "No backup taken yet on this device.";
+      document.querySelectorAll(".backup-status").forEach(el => el.textContent = text);
+    }
+
+    function isValidSetState(s) {
+      return s && typeof s === "object" && Array.isArray(s.nugTypes) && Array.isArray(s.colors);
+    }
+
+    function normalizeSetState(s) {
+      return Object.assign({
+        setName: "", invoiceNum: "", date: new Date().toISOString().split('T')[0],
+        customerName: "", notes: "", currency: "Rs.", globalLaborCostPer100: 0,
+        wastePercent: 0, nugTypes: [], colors: [], images: []
+      }, s);
+    }
+
+    function stateIsEmpty(s) {
+      return !s.setName && !s.invoiceNum && !s.customerName &&
+        (!s.nugTypes || !s.nugTypes.length) && (!s.colors || !s.colors.length) && (!s.images || !s.images.length);
     }
 
     function importJSONFile(e) {
-      const file = e.target.files[0];
+      const input = e.target;
+      const file = input.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = function(event) {
+      reader.onload = async function(event) {
+        input.value = ""; // allow picking the same file again later
+        let data;
         try {
-          const importedState = JSON.parse(event.target.result);
-          if (importedState.nugTypes && importedState.colors) {
-            appState = importedState;
+          data = JSON.parse(event.target.result);
+        } catch (err) {
+          showToast("This file is not a valid backup (could not read it).", "danger");
+          return;
+        }
+        try {
+          if (data && data.app === "nug-calculator" && Array.isArray(data.history)) {
+            await restoreFullBackup(data);
+          } else if (isValidSetState(data)) {
+            // Older single-set export: open it as the current set.
+            appState = normalizeSetState(data);
             populateFormFromState();
+            saveDraftToLocalStorage();
             closeModal("modal-history");
-            showToast("Imported set successfully!", "success");
+            closeModal("modal-drive");
+            showToast("Set imported and opened.", "success");
           } else {
-            showToast("Invalid JSON file structure.", "danger");
+            showToast("This file is not a Nug Calculator backup.", "danger");
           }
         } catch (err) {
-          showToast("Failed to parse JSON file.", "danger");
+          console.error(err);
+          showToast("Restore failed: " + (err && err.message ? err.message : "unknown error"), "danger");
         }
       };
+      reader.onerror = () => showToast("Could not open the file.", "danger");
       reader.readAsText(file);
+    }
+
+    async function restoreFullBackup(data) {
+      // 1. Saved sets: add any that aren't here; keep the newer copy when both exist.
+      const existing = await getSavedHistory();
+      const byId = new Map(existing.map(h => [h.id, h]));
+      let addedSets = 0, updatedSets = 0;
+      for (const item of data.history) {
+        if (!item || !item.id || !isValidSetState(item.state)) continue;
+        const mine = byId.get(item.id);
+        if (!mine) { await db.history.put(item); addedSets++; }
+        else if (String(item.timestamp || "") > String(mine.timestamp || "")) { await db.history.put(item); updatedSets++; }
+      }
+
+      // 2. Saved nug types: add new names, keep this phone's values for names it already has.
+      let addedTypes = 0;
+      (Array.isArray(data.nugLibrary) ? data.nugLibrary : []).forEach(l => {
+        if (!l || !String(l.name || "").trim() || findLibByName(l.name)) return;
+        upsertLibItem(l.name, l.weightPer100, l.ratePer100);
+        addedTypes++;
+      });
+      if (addedTypes) { saveNugLibrary(); renderNugLibrary(); }
+
+      // 3. The set that was open: replace the current one only if it's empty, or the user agrees.
+      let openedCurrent = false;
+      if (isValidSetState(data.current) && !stateIsEmpty(data.current)) {
+        if (stateIsEmpty(appState) || confirm(`Open the set from the backup ("${data.current.setName || "Untitled"}")?\nYour current unsaved screen will be replaced.`)) {
+          appState = normalizeSetState(data.current);
+          populateFormFromState();
+          await saveDraftToLocalStorage();
+          openedCurrent = true;
+        }
+      }
+
+      renderHistoryModal();
+      closeModal("modal-drive");
+      let msg = `Restored: ${addedSets} new sets`;
+      if (updatedSets) msg += `, ${updatedSets} updated`;
+      msg += `, ${addedTypes} new nug types`;
+      if (openedCurrent) msg += ", open set loaded";
+      showToast(msg + ".", "success");
     }
 
     function resetAll() {
@@ -3092,9 +3374,8 @@
           date: new Date().toISOString().split('T')[0],
           customerName: "",
           notes: "",
-          currency: "$",
+          currency: appState.currency || "Rs.",
           globalLaborCostPer100: 0,
-          markupPercent: 0,
           wastePercent: 0,
           nugTypes: [],
           colors: [],
@@ -3109,19 +3390,6 @@
     /* ==========================================================================
        GOOGLE DRIVE INTEGRATION & MOCK FALLBACK
        ========================================================================== */
-    function syncSingleSetToDrive(id) {
-      const history = getSavedHistory();
-      const item = history.find(h => h.id === id);
-      if (!item) return;
-
-      const userEmail = localStorage.getItem("nug_user_gmail") || "user@gmail.com";
-      showToast(`Saving transaction #${item.invoice} to Google Drive (${userEmail})...`, "info");
-      
-      setTimeout(() => {
-        showToast(`Transaction #${item.invoice} saved to Google Drive! (${userEmail})`, "success");
-      }, 1000);
-    }
-
     /* ==========================================================================
        GMAIL LOGIN & GOOGLE DRIVE INTEGRATION
        ========================================================================== */
@@ -3194,30 +3462,6 @@
       const loggedInDiv = document.getElementById("google-logged-in");
       if (loggedOutDiv) loggedOutDiv.style.display = "flex";
       if (loggedInDiv) loggedInDiv.style.display = "none";
-    }
-
-    function handleDriveSave() {
-      const userEmail = localStorage.getItem("nug_user_gmail");
-      if (!userEmail) {
-        showToast("Please sign in with your Gmail first in the Drive Sync modal.", "danger");
-        openModal("modal-drive");
-        return;
-      }
-      showToast(`Saving active transaction to Google Drive (${userEmail})...`, "info");
-      setTimeout(() => {
-        showToast(`Saved transaction #${appState.invoiceNum || '000'} to Google Drive! (${userEmail})`, "success");
-        closeModal("modal-drive");
-      }, 1000);
-    }
-
-    function handleDriveLoad() {
-      const userEmail = localStorage.getItem("nug_user_gmail");
-      if (!userEmail) {
-        showToast("Please sign in with your Gmail first.", "danger");
-        return;
-      }
-      document.getElementById("import-json-input").click();
-      closeModal("modal-drive");
     }
 
     // Auto init auth on load
@@ -3324,41 +3568,22 @@
       document.getElementById("gp-total-weight").textContent = totalWeightGrams.toFixed(2) + " g";
     }
 
-    function exportGatePassPDF() {
+    async function exportGatePassPDF() {
+      if (pdfBusy) return;
+      pdfBusy = true;
       showToast("Generating Gate Pass PDF...", "info");
-      const element = document.getElementById("gatepass-preview-container");
-
-      const jsPdfObj = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-
-      if (!jsPdfObj || typeof html2canvas === 'undefined') {
-        showToast("Opening Gate Pass print view...", "info");
-        printGatePassSheet();
-        return;
-      }
-
-      const opt = {
-        scale: 2,
-        useCORS: true,
-        logging: false
-      };
-
-      html2canvas(element, opt).then(canvas => {
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jsPdfObj("p", "mm", "a4");
-
-        const imgWidth = 210;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-        pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-        const filename = `GatePass_${(appState.setName || "Set").replace(/\s+/g, '_')}_${appState.invoiceNum || '000'}.pdf`;
-        
-        // Trigger Native Mobile Share Sheet (WhatsApp, Social Apps, etc.) for Gate Pass PDF
+      try {
+        renderGatePass();
+        const pdf = await buildPagedPDF("gatepass-preview-container");
+        const filename = `GatePass_${safeFilePart(appState.setName, "Set")}_${safeFilePart(appState.invoiceNum, "000")}.pdf`;
         sharePDFFile(pdf, filename, `Gate Pass - ${appState.setName || "Dispatch"}`);
-      }).catch(err => {
+      } catch (err) {
         console.error(err);
         showToast("Opening printable Gate Pass sheet...", "info");
         printGatePassSheet();
-      });
+      } finally {
+        pdfBusy = false;
+      }
     }
 
     function printGatePassSheet() {
