@@ -536,6 +536,8 @@
     .autosave-note { font-size: 0.78rem; color: var(--success); }
     .autosave-note.saving { color: var(--text-muted); }
 
+    .add-below-btn { width: 100%; justify-content: center; margin-top: 14px; padding: 13px; font-size: 0.95rem; }
+
     /* Share modal */
     .share-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .share-opt input { position: absolute; opacity: 0; pointer-events: none; }
@@ -1381,9 +1383,6 @@
       <div class="card">
         <div class="card-header">
           <h2 class="card-title"><i class="fa-solid fa-shapes"></i> Nugget Types & Specifications</h2>
-          <button class="btn btn-primary btn-sm" id="btn-add-nug-type">
-            <i class="fa-solid fa-plus"></i> Add Nugget Type
-          </button>
         </div>
 
         <div class="table-container">
@@ -1403,6 +1402,9 @@
             </tbody>
           </table>
         </div>
+        <button class="btn btn-primary add-below-btn" id="btn-add-nug-type">
+          <i class="fa-solid fa-plus"></i> Add Nugget Type
+        </button>
       </div>
     </section>
 
@@ -1429,9 +1431,6 @@
       <div class="card">
         <div class="card-header">
           <h2 class="card-title"><i class="fa-solid fa-palette"></i> Color Variations & Set Quantities</h2>
-          <button class="btn btn-primary btn-sm" id="btn-add-color">
-            <i class="fa-solid fa-plus"></i> Add Color Variation
-          </button>
         </div>
 
         <div class="table-container">
@@ -1449,6 +1448,9 @@
             </tbody>
           </table>
         </div>
+        <button class="btn btn-primary add-below-btn" id="btn-add-color">
+          <i class="fa-solid fa-plus"></i> Add Color Variation
+        </button>
       </div>
     </section>
 
@@ -2290,7 +2292,7 @@
       document.getElementById("badge-nug-types").textContent = appState.nugTypes.length;
 
       if (appState.nugTypes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No nugget types added yet. Click "+ Add Nugget Type" above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No nugget types added yet. Click "+ Add Nugget Type" below.</td></tr>`;
         return;
       }
 
@@ -3293,7 +3295,7 @@
       document.getElementById("badge-colors").textContent = appState.colors.length;
 
       if (appState.colors.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No color variations added yet. Click "+ Add Color Variation" above.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No color variations added yet. Click "+ Add Color Variation" below.</td></tr>`;
         return;
       }
 
