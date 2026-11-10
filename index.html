@@ -1756,6 +1756,10 @@
           <div id="thermal-actions" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 10px;">
             <button class="btn btn-primary" id="btn-thermal-bt" style="justify-content: center;"><i class="fa-brands fa-bluetooth-b"></i> <span id="thermal-bt-label">Print via Bluetooth</span></button>
             <button class="btn btn-outline-gold" id="btn-thermal-app" style="justify-content: center;"><i class="fa-solid fa-print"></i> Print with printer app (RawBT)</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <button class="btn btn-secondary" id="btn-slip-share" style="justify-content: center;"><i class="fa-solid fa-share-nodes"></i> Share slip</button>
+              <button class="btn btn-secondary" id="btn-slip-download" style="justify-content: center;"><i class="fa-solid fa-download"></i> Download</button>
+            </div>
             <p class="thermal-help">If Bluetooth print doesn't find your printer, use the printer app: install <strong>RawBT</strong> from Play Store once, pair the printer in it, then tap the button above and choose RawBT.</p>
           </div>
           <div id="pdf-actions" style="display: flex; flex-direction: column; gap: 10px;">
@@ -5130,6 +5134,25 @@
       showToast("Slip image downloaded — open it with RawBT or your printer app.", "info");
     }
 
+    // Share the slip as a picture (WhatsApp, Gmail, etc.).
+    async function shareSlip() {
+      if (!shareState.slip) return;
+      const blob = await slipBlob();
+      const file = new File([blob], shareState.filename, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: shareState.title }); return; }
+        catch (err) { if (err && err.name === "AbortError") return; }
+      }
+      downloadBlob(blob, shareState.filename);
+      showToast("Sharing not available here — slip image downloaded instead.", "info");
+    }
+
+    async function downloadSlip() {
+      if (!shareState.slip) return;
+      downloadBlob(await slipBlob(), shareState.filename);
+      showToast("Slip image downloaded.", "success");
+    }
+
     async function makeSharePDF() {
       if (pdfBusy) return;
       const kind = shareKind();
@@ -5229,6 +5252,8 @@
       if (paperEl) paperEl.checked = true;
       document.getElementById("btn-thermal-bt").addEventListener("click", printViaBluetooth);
       document.getElementById("btn-thermal-app").addEventListener("click", printViaApp);
+      document.getElementById("btn-slip-share").addEventListener("click", shareSlip);
+      document.getElementById("btn-slip-download").addEventListener("click", downloadSlip);
       document.getElementById("btn-share-make").addEventListener("click", makeSharePDF);
       document.getElementById("btn-share-send").addEventListener("click", sendSharePDF);
       document.getElementById("btn-share-download").addEventListener("click", () => {
