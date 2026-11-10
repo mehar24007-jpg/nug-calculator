@@ -546,6 +546,12 @@
     .share-opt span small { font-size: 0.7rem; color: var(--text-muted); }
     .share-opt input:checked + span { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(245,158,11,0.08); }
     .share-opt-wide { grid-column: 1 / -1; }
+    .paper-row { display: flex; align-items: center; gap: 14px; margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary); }
+    .paper-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-main); cursor: pointer; }
+    .paper-row input { width: 18px; height: 18px; accent-color: #f59e0b; }
+    .thermal-help { font-size: 0.72rem; color: var(--text-muted); text-align: left; margin: 0; }
+    .share-preview.thermal { background: #e5e7eb; align-items: center; }
+    .share-preview.thermal img { width: auto; max-width: 100%; box-shadow: 0 1px 4px rgba(0,0,0,0.25); border-radius: 0; }
     .share-preview { max-height: 52vh; overflow-y: auto; background: #0b1220; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
     .share-preview img { width: 100%; display: block; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
     .share-preview .pv-label { font-size: 0.7rem; color: var(--text-muted); text-align: right; margin-top: -4px; }
@@ -1721,10 +1727,19 @@
               <input type="radio" name="share-kind" value="report">
               <span><i class="fa-solid fa-file-pdf"></i><strong>PDF Report</strong><small>Full color-wise breakdown</small></span>
             </label>
-            <label class="share-opt share-opt-wide">
+            <label class="share-opt">
               <input type="radio" name="share-kind" value="short">
-              <span><i class="fa-solid fa-list-check"></i><strong>Short Sheet</strong><small>Each color's sets, nug count &amp; weight only — totals at the end</small></span>
+              <span><i class="fa-solid fa-list-check"></i><strong>Short Sheet</strong><small>Sets, nug count &amp; weight + totals</small></span>
             </label>
+            <label class="share-opt">
+              <input type="radio" name="share-kind" value="thermal">
+              <span><i class="fa-solid fa-receipt"></i><strong>Thermal Print</strong><small>Bluetooth slip printer</small></span>
+            </label>
+          </div>
+          <div class="paper-row" id="share-paper-row" style="display: none;">
+            <span>Paper roll:</span>
+            <label><input type="radio" name="share-paper" value="80"> 80mm</label>
+            <label><input type="radio" name="share-paper" value="58"> 58mm</label>
           </div>
           <label class="share-check" id="share-price-wrap">
             <input type="checkbox" id="share-with-prices">
@@ -1735,14 +1750,19 @@
           </button>
         </div>
         <div id="share-step-ready" style="display: none; text-align: center;">
-          <p style="color: var(--success); margin-bottom: 4px;"><i class="fa-solid fa-circle-check"></i> PDF ready — <span id="share-page-count"></span></p>
+          <p style="color: var(--success); margin-bottom: 4px;"><i class="fa-solid fa-circle-check"></i> <span id="share-ready-label">PDF ready</span> — <span id="share-page-count"></span></p>
           <p id="share-file-name" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;"></p>
           <div class="share-preview" id="share-preview"></div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div id="thermal-actions" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 10px;">
+            <button class="btn btn-primary" id="btn-thermal-bt" style="justify-content: center;"><i class="fa-brands fa-bluetooth-b"></i> <span id="thermal-bt-label">Print via Bluetooth</span></button>
+            <button class="btn btn-outline-gold" id="btn-thermal-app" style="justify-content: center;"><i class="fa-solid fa-print"></i> Print with printer app (RawBT)</button>
+            <p class="thermal-help">If Bluetooth print doesn't find your printer, use the printer app: install <strong>RawBT</strong> from Play Store once, pair the printer in it, then tap the button above and choose RawBT.</p>
+          </div>
+          <div id="pdf-actions" style="display: flex; flex-direction: column; gap: 10px;">
             <button class="btn btn-primary" id="btn-share-send" style="justify-content: center;"><i class="fa-solid fa-share-nodes"></i> Share (WhatsApp, Gmail…)</button>
             <button class="btn btn-secondary" id="btn-share-download" style="justify-content: center;"><i class="fa-solid fa-download"></i> Download</button>
-            <button class="btn btn-secondary btn-sm" id="btn-share-back" style="justify-content: center;">Make a different one</button>
           </div>
+          <button class="btn btn-secondary btn-sm" id="btn-share-back" style="justify-content: center; width: 100%; margin-top: 10px;">Make a different one</button>
         </div>
       </div>
     </div>
@@ -3464,6 +3484,7 @@
         scrapCost,
         grandTotalCost
       });
+      return { totalLaborCost, totalMaterialCost, scrapCost, grandTotalCost };
     }
 
     /* ==========================================================================
@@ -4740,9 +4761,14 @@
     }
 
     function updateSharePriceToggle() {
-      const isReport = shareKind() === "report";
-      document.getElementById("share-price-wrap").classList.toggle("disabled", !isReport);
-      if (!isReport) document.getElementById("share-with-prices").checked = false;
+      const kind = shareKind();
+      const allowPrices = kind === "report" || kind === "thermal";
+      document.getElementById("share-price-wrap").classList.toggle("disabled", !allowPrices);
+      if (!allowPrices) document.getElementById("share-with-prices").checked = false;
+      document.getElementById("share-paper-row").style.display = kind === "thermal" ? "flex" : "none";
+      document.getElementById("btn-share-make").innerHTML = kind === "thermal"
+        ? '<i class="fa-solid fa-receipt"></i> Make Print Slip'
+        : '<i class="fa-solid fa-file-export"></i> Make PDF';
     }
 
     // Run fn with a saved item loaded into the screen state, then put the screen back.
@@ -4848,10 +4874,300 @@
       box.scrollTop = 0;
     }
 
+    /* ==========================================================================
+       THERMAL PRINTER (58 / 80 mm, ESC/POS)
+       The slip is drawn on a canvas at the printer's dot width (80mm = 576 dots,
+       58mm = 384 dots), in pure black & white. It can be sent straight to a
+       Bluetooth (BLE) printer, or shared as an image to a printer app (RawBT).
+       ========================================================================== */
+    const STORAGE_KEY_PAPER = "nug_calc_paper_mm";
+    const thermal = { device: null, characteristic: null };
+
+    function paperMM() {
+      const el = document.querySelector('input[name="share-paper"]:checked');
+      return el && el.value === "58" ? 58 : 80;
+    }
+
+    function buildThermalSlip(mm, withPrices) {
+      const st = appState;
+      const W = mm === 58 ? 384 : 576;
+      const base = mm === 58 ? 20 : 25;
+      const pad = 6;
+      const font = (size, bold) => `${bold ? "700" : "400"} ${size}px Arial, Helvetica, sans-serif`;
+      const curr = st.currency || "Rs.";
+      const money = n => `${curr} ${(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const pcs = n => `${Math.round(Number(n) || 0).toLocaleString()}`;
+      const g = n => `${(Number(n) || 0).toFixed(2)}g`;
+
+      // Build a list of drawing operations first, then size the canvas to fit.
+      const ops = [];
+      const measure = document.createElement("canvas").getContext("2d");
+      const wrap = (text, size, bold, maxW) => {
+        measure.font = font(size, bold);
+        const words = String(text).split(/\s+/);
+        const lines = []; let line = "";
+        words.forEach(w => {
+          const t = line ? line + " " + w : w;
+          if (measure.measureText(t).width <= maxW || !line) line = t; else { lines.push(line); line = w; }
+        });
+        if (line) lines.push(line);
+        return lines;
+      };
+      const text = (t, { size = base, bold = false, align = "left" } = {}) =>
+        wrap(t, size, bold, W - pad * 2).forEach(l => ops.push({ type: "text", t: l, size, bold, align, h: Math.round(size * 1.35) }));
+      // Row: name on the left (wraps), numbers in fixed right columns.
+      const colQ = Math.round(W * 0.30), colW = Math.round(W * 0.25);
+      const row = (name, q, w, { size = base, bold = false, indent = 0 } = {}) => {
+        const nameW = W - pad * 2 - indent - colQ - colW;
+        const lines = wrap(name, size, bold, nameW);
+        lines.forEach((l, i) => ops.push({ type: "row", t: l, q: i === 0 ? q : "", w: i === 0 ? w : "", size, bold, indent, h: Math.round(size * 1.35) }));
+      };
+      const line = (thick = 2) => ops.push({ type: "line", thick, h: thick + 10 });
+      const dash = () => ops.push({ type: "dash", h: 12 });
+      const gap = (h = 8) => ops.push({ type: "gap", h });
+
+      text(st.setName || "Untitled item", { size: base + 7, bold: true, align: "center" });
+      if (st.customerName) text(`Client: ${st.customerName}`, { align: "center" });
+      const meta = [st.invoiceNum ? `Inv# ${st.invoiceNum}` : "", st.date || ""].filter(Boolean).join("   ");
+      if (meta) text(meta, { size: base - 3, align: "center" });
+      line(3);
+
+      let allSets = 0;
+      st.colors.forEach(col => {
+        const sets = col.setsCount || 0;
+        allSets += sets;
+        const t = colorTotals(col);
+        row(col.name || "Untitled color", "", `${sets} Set${sets === 1 ? "" : "s"}`, { size: base + 2, bold: true });
+        t.list.forEach(n => {
+          const qty = (n.qtyPerSet || 0) * sets;
+          const wt = ((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100) * sets;
+          row(n.status === "replace" ? `${n.name} *` : n.name, pcs(qty), g(wt), { indent: 14 });
+        });
+        row("Total", pcs(t.nugs), g(t.wt), { bold: true });
+        if (withPrices) {
+          const cost = t.mat + (t.nugs / 100) * (st.globalLaborCostPer100 || 0) + t.mat * ((st.wastePercent || 0) / 100);
+          row("Cost", "", money(cost), { size: base - 2 });
+        }
+        dash();
+      });
+      if (st.colors.some(c => colorTotals(c).list.some(n => n.status === "replace"))) {
+        text("* replaced for this color", { size: base - 6 });
+      }
+
+      const grand = nugGrandTotals();
+      if (grand.length) {
+        gap(4);
+        text("TOTAL BY NUG TYPE", { size: base + 1, bold: true, align: "center" });
+        line(2);
+        let gq = 0, gw = 0;
+        grand.forEach(x => { gq += x.qty; gw += x.wt; row(x.name, pcs(x.qty), g(x.wt)); });
+        line(3);
+        row("ALL TYPES", pcs(gq), g(gw), { size: base + 1, bold: true });
+        text(`${allSets} sets · ${grand.length} nug types`, { size: base - 5 });
+        line(3);
+        if (withPrices) {
+          const m = calculate() || {};
+          const mat = m.totalMaterialCost || 0, lab = m.totalLaborCost || 0, scrap = m.scrapCost || 0;
+          row("Material", "", money(mat));
+          row("Labour", "", money(lab));
+          if (scrap) row(`Scrap ${st.wastePercent || 0}%`, "", money(scrap));
+          row("GRAND TOTAL", "", money(m.grandTotalCost != null ? m.grandTotalCost : mat + lab + scrap), { size: base + 2, bold: true });
+          line(3);
+        }
+      }
+      gap(6);
+      text(new Date().toLocaleString(), { size: base - 6, align: "center" });
+      gap(30);
+
+      const H = ops.reduce((sum, o) => sum + o.h, 0) + 10;
+      const c = document.createElement("canvas");
+      c.width = W; c.height = H;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#000"; ctx.strokeStyle = "#000";
+      ctx.textBaseline = "top";
+      let y = 6;
+      ops.forEach(o => {
+        if (o.type === "text") {
+          ctx.font = font(o.size, o.bold);
+          ctx.textAlign = o.align;
+          const x = o.align === "center" ? W / 2 : o.align === "right" ? W - pad : pad;
+          ctx.fillText(o.t, x, y);
+        } else if (o.type === "row") {
+          ctx.font = font(o.size, o.bold);
+          ctx.textAlign = "left";  ctx.fillText(o.t, pad + o.indent, y);
+          ctx.textAlign = "right"; ctx.fillText(o.q, W - pad - colW - 4, y);
+          ctx.fillText(o.w, W - pad, y);
+        } else if (o.type === "line") {
+          ctx.fillRect(pad, y + 4, W - pad * 2, o.thick);
+        } else if (o.type === "dash") {
+          for (let x = pad; x < W - pad; x += 12) ctx.fillRect(x, y + 5, 6, 2);
+        }
+        y += o.h;
+      });
+
+      // Pure black & white (thermal printers can't print grey).
+      const img = ctx.getImageData(0, 0, W, H);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) < 150 ? 0 : 255;
+        d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      return c;
+    }
+
+    // ESC/POS bytes: init, image as raster bands (GS v 0), feed, cut.
+    function slipToEscPos(canvas) {
+      const W = canvas.width, H = canvas.height;
+      const bytesPerRow = Math.ceil(W / 8);
+      const px = canvas.getContext("2d").getImageData(0, 0, W, H).data;
+      const out = [0x1B, 0x40]; // ESC @
+      const BAND = 128;
+      for (let y0 = 0; y0 < H; y0 += BAND) {
+        const h = Math.min(BAND, H - y0);
+        out.push(0x1D, 0x76, 0x30, 0x00, bytesPerRow & 0xFF, bytesPerRow >> 8, h & 0xFF, h >> 8);
+        for (let y = y0; y < y0 + h; y++) {
+          for (let bx = 0; bx < bytesPerRow; bx++) {
+            let b = 0;
+            for (let bit = 0; bit < 8; bit++) {
+              const x = bx * 8 + bit;
+              if (x < W && px[(y * W + x) * 4] < 128) b |= 0x80 >> bit;
+            }
+            out.push(b);
+          }
+        }
+      }
+      out.push(0x1B, 0x64, 0x04);       // feed 4 lines
+      out.push(0x1D, 0x56, 0x42, 0x00); // cut (ignored by printers without a cutter)
+      return new Uint8Array(out);
+    }
+
+    // Common BLE services used by ESC/POS printers.
+    const PRINTER_SERVICES = [
+      "000018f0-0000-1000-8000-00805f9b34fb",
+      "0000ff00-0000-1000-8000-00805f9b34fb",
+      "0000ffe0-0000-1000-8000-00805f9b34fb",
+      "0000fee7-0000-1000-8000-00805f9b34fb",
+      "0000ae30-0000-1000-8000-00805f9b34fb",
+      "0000af30-0000-1000-8000-00805f9b34fb",
+      "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
+      "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+    ];
+
+    async function findWritable(server) {
+      const services = await server.getPrimaryServices();
+      for (const svc of services) {
+        let chars = [];
+        try { chars = await svc.getCharacteristics(); } catch (_) { continue; }
+        const ch = chars.find(c => c.properties.writeWithoutResponse) || chars.find(c => c.properties.write);
+        if (ch) return ch;
+      }
+      return null;
+    }
+
+    async function printViaBluetooth() {
+      if (!navigator.bluetooth) {
+        showToast("This browser can't use Bluetooth. Use Chrome on Android, or the printer app button.", "danger");
+        return;
+      }
+      if (!shareState.slip) return;
+      const btn = document.getElementById("btn-thermal-bt");
+      const label = document.getElementById("thermal-bt-label");
+      btn.disabled = true;
+      try {
+        if (!thermal.device || !thermal.characteristic) {
+          label.textContent = "Choose your printer…";
+          thermal.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: PRINTER_SERVICES });
+        }
+        label.textContent = "Connecting…";
+        const server = thermal.device.gatt.connected ? thermal.device.gatt : await thermal.device.gatt.connect();
+        if (!thermal.characteristic || !thermal.characteristic.service.device.gatt.connected) {
+          thermal.characteristic = await findWritable(server);
+        }
+        if (!thermal.characteristic) throw new Error("This printer has no Bluetooth LE print channel");
+        const data = slipToEscPos(shareState.slip);
+        const ch = thermal.characteristic;
+        const noResp = ch.properties.writeWithoutResponse;
+        const CHUNK = noResp ? 180 : 512;
+        for (let i = 0; i < data.length; i += CHUNK) {
+          label.textContent = `Printing… ${Math.round((i / data.length) * 100)}%`;
+          const part = data.slice(i, i + CHUNK);
+          if (noResp) {
+            await ch.writeValueWithoutResponse(part);
+            await new Promise(r => setTimeout(r, 12)); // let the printer's buffer keep up
+          } else {
+            await ch.writeValueWithResponse(part);
+          }
+        }
+        showToast("Sent to printer.", "success");
+      } catch (err) {
+        console.error(err);
+        if (err && err.name === "NotFoundError") { /* user closed the device picker */ }
+        else {
+          thermal.characteristic = null;
+          showToast("Bluetooth print failed: " + (err && err.message ? err.message : "error") + ". Try the printer app button.", "danger");
+        }
+      } finally {
+        btn.disabled = false;
+        label.textContent = thermal.device ? `Print to ${thermal.device.name || "printer"}` : "Print via Bluetooth";
+      }
+    }
+
+    function slipBlob() {
+      return new Promise(resolve => shareState.slip.toBlob(resolve, "image/png"));
+    }
+
+    async function printViaApp() {
+      if (!shareState.slip) return;
+      const blob = await slipBlob();
+      const file = new File([blob], shareState.filename, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: shareState.title }); return; }
+        catch (err) { if (err && err.name === "AbortError") return; }
+      }
+      downloadBlob(blob, shareState.filename);
+      showToast("Slip image downloaded — open it with RawBT or your printer app.", "info");
+    }
+
     async function makeSharePDF() {
       if (pdfBusy) return;
       const kind = shareKind();
-      const withPrices = kind === "report" && document.getElementById("share-with-prices").checked;
+      const withPrices = (kind === "report" || kind === "thermal") && document.getElementById("share-with-prices").checked;
+      if (kind === "thermal") {
+        try { localStorage.setItem(STORAGE_KEY_PAPER, String(paperMM())); } catch (_) {}
+        try {
+          await withItemState(shareState.itemId, async () => {
+            calculate();
+            shareState.slip = buildThermalSlip(paperMM(), withPrices);
+            shareState.pdf = null;
+            shareState.filename = `Slip_${safeFilePart(appState.setName, "Item")}_${safeFilePart(appState.invoiceNum, "000")}.png`;
+            shareState.title = `${appState.setName || "Item"} - Print Slip`;
+          });
+        } catch (err) {
+          console.error(err);
+          showToast("Could not make the print slip.", "danger");
+          return;
+        }
+        const box = document.getElementById("share-preview");
+        box.classList.add("thermal");
+        box.innerHTML = `<img src="${shareState.slip.toDataURL("image/png")}" alt="Print slip">`;
+        box.style.display = "";
+        box.scrollTop = 0;
+        document.getElementById("share-page-count").textContent = `${paperMM()}mm`;
+        document.getElementById("share-ready-label").textContent = "Print slip ready";
+        document.getElementById("share-file-name").textContent = "";
+        document.getElementById("thermal-actions").style.display = "flex";
+        document.getElementById("pdf-actions").style.display = "none";
+        document.getElementById("thermal-bt-label").textContent = thermal.device ? `Print to ${thermal.device.name || "printer"}` : "Print via Bluetooth";
+        document.getElementById("share-step-choose").style.display = "none";
+        document.getElementById("share-step-ready").style.display = "block";
+        return;
+      }
+      document.getElementById("share-preview").classList.remove("thermal");
+      document.getElementById("share-ready-label").textContent = "PDF ready";
+      document.getElementById("thermal-actions").style.display = "none";
+      document.getElementById("pdf-actions").style.display = "flex";
       const btn = document.getElementById("btn-share-make");
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Making PDF…';
@@ -4888,7 +5204,7 @@
       } finally {
         pdfBusy = false;
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-file-export"></i> Make PDF';
+        updateSharePriceToggle();
       }
     }
 
@@ -4907,6 +5223,12 @@
 
     function initShare() {
       document.querySelectorAll('input[name="share-kind"]').forEach(r => r.addEventListener("change", updateSharePriceToggle));
+      let savedPaper = "80";
+      try { savedPaper = localStorage.getItem(STORAGE_KEY_PAPER) || "80"; } catch (_) {}
+      const paperEl = document.querySelector(`input[name="share-paper"][value="${savedPaper === "58" ? "58" : "80"}"]`);
+      if (paperEl) paperEl.checked = true;
+      document.getElementById("btn-thermal-bt").addEventListener("click", printViaBluetooth);
+      document.getElementById("btn-thermal-app").addEventListener("click", printViaApp);
       document.getElementById("btn-share-make").addEventListener("click", makeSharePDF);
       document.getElementById("btn-share-send").addEventListener("click", sendSharePDF);
       document.getElementById("btn-share-download").addEventListener("click", () => {
