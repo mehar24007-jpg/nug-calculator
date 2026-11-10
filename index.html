@@ -545,6 +545,10 @@
     .share-opt span i { font-size: 1.4rem; }
     .share-opt span small { font-size: 0.7rem; color: var(--text-muted); }
     .share-opt input:checked + span { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(245,158,11,0.08); }
+    .share-opt-wide { grid-column: 1 / -1; }
+    .share-preview { max-height: 52vh; overflow-y: auto; background: #0b1220; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .share-preview img { width: 100%; display: block; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+    .share-preview .pv-label { font-size: 0.7rem; color: var(--text-muted); text-align: right; margin-top: -4px; }
     .share-check { display: flex; justify-content: flex-start !important; gap: 10px; align-items: flex-start; margin-top: 14px; text-align: left; font-size: 0.9rem; color: var(--text-main); cursor: pointer; }
     .share-check input { width: 20px; height: 20px; accent-color: #f59e0b; margin-top: 1px; flex-shrink: 0; }
     .share-check span { flex: 1; }
@@ -1694,6 +1698,9 @@
     </button>
   </div>
 
+  <!-- Short Sheet (built on demand for PDF) -->
+  <div class="report-preview-container" id="short-sheet" style="display: none;"></div>
+
   <!-- Share Modal -->
   <div class="modal-overlay" id="modal-share">
     <div class="modal" style="max-width: 460px;">
@@ -1714,6 +1721,10 @@
               <input type="radio" name="share-kind" value="report">
               <span><i class="fa-solid fa-file-pdf"></i><strong>PDF Report</strong><small>Full color-wise breakdown</small></span>
             </label>
+            <label class="share-opt share-opt-wide">
+              <input type="radio" name="share-kind" value="short">
+              <span><i class="fa-solid fa-list-check"></i><strong>Short Sheet</strong><small>Each color's sets, nug count &amp; weight only — totals at the end</small></span>
+            </label>
           </div>
           <label class="share-check" id="share-price-wrap">
             <input type="checkbox" id="share-with-prices">
@@ -1724,8 +1735,9 @@
           </button>
         </div>
         <div id="share-step-ready" style="display: none; text-align: center;">
-          <p style="color: var(--success); margin-bottom: 4px;"><i class="fa-solid fa-circle-check"></i> PDF ready</p>
-          <p id="share-file-name" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; word-break: break-all;"></p>
+          <p style="color: var(--success); margin-bottom: 4px;"><i class="fa-solid fa-circle-check"></i> PDF ready — <span id="share-page-count"></span></p>
+          <p id="share-file-name" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;"></p>
+          <div class="share-preview" id="share-preview"></div>
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <button class="btn btn-primary" id="btn-share-send" style="justify-content: center;"><i class="fa-solid fa-share-nodes"></i> Share (WhatsApp, Gmail…)</button>
             <button class="btn btn-secondary" id="btn-share-download" style="justify-content: center;"><i class="fa-solid fa-download"></i> Download</button>
@@ -3725,6 +3737,7 @@
       const pagePx = Math.floor(canvas.width * (pageH / pageW)); // canvas px that fit on one page
       breaks = breaks.map(b => Math.round(b * pxPerCss)).filter(b => b > 0 && b < canvas.height).sort((a, b) => a - b);
 
+      const previews = [];
       let y = 0, page = 0;
       while (y < canvas.height - 2) {
         let end = Math.min(y + pagePx, canvas.height);
@@ -3744,7 +3757,9 @@
 
         if (page > 0) pdf.addPage();
         const hMm = sliceH * pageW / canvas.width;
-        pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, pageW, hMm);
+        const pageImg = slice.toDataURL("image/jpeg", 0.92);
+        pdf.addImage(pageImg, "JPEG", margin, margin, pageW, hMm);
+        previews.push(pageImg);
         page++;
         y = end;
       }
@@ -3759,6 +3774,7 @@
           pdf.text(`Page ${i} of ${total}`, 210 - margin, 297 - 3, { align: "right" });
         }
       }
+      pdf.__previews = previews;
       return pdf;
     }
 
@@ -4745,6 +4761,93 @@
       }
     }
 
+    // Short sheet: per color — sets, then each nug type's count and weight; totals at the end.
+    function renderShortSheet() {
+      const st = appState;
+      const fmtG = n => `${(Number(n) || 0).toFixed(2)} g`;
+      const fmtQ = n => `${Math.round(Number(n) || 0).toLocaleString()} pcs`;
+      const cell = "padding: 7px 10px; border-bottom: 1px solid #e2e8f0;";
+      const num = cell + " text-align: right; white-space: nowrap;";
+      // Same column widths in every table so the numbers line up down the page.
+      const cols = `<colgroup><col style="width: 56%;"><col style="width: 22%;"><col style="width: 22%;"></colgroup>`;
+      let html = `
+        <div style="display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #f59e0b; padding-bottom: 12px; margin-bottom: 16px;">
+          <div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #0f172a;">${escapeHtml(st.setName || "Untitled item")}</div>
+            ${st.customerName ? `<div style="color: #475569; margin-top: 2px;">Client: ${escapeHtml(st.customerName)}</div>` : ""}
+            <div style="color: #64748b; font-size: 0.8rem; margin-top: 2px;">Nug Quantity &amp; Weight Sheet</div>
+          </div>
+          <div style="text-align: right; color: #475569; font-size: 0.85rem;">
+            ${st.invoiceNum ? `<div><strong>Invoice #:</strong> ${escapeHtml(st.invoiceNum)}</div>` : ""}
+            ${st.date ? `<div><strong>Date:</strong> ${escapeHtml(st.date)}</div>` : ""}
+          </div>
+        </div>`;
+
+      if (!st.colors.length) {
+        html += `<p style="color: #64748b;">No colors added yet.</p>`;
+      }
+
+      let allSets = 0;
+      st.colors.forEach(col => {
+        const sets = col.setsCount || 0;
+        allSets += sets;
+        const list = nugsForColor(col);
+        let q = 0, w = 0;
+        const rows = list.map(n => {
+          const qty = (n.qtyPerSet || 0) * sets;
+          const wt = ((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100) * sets;
+          q += qty; w += wt;
+          const tag = n.status === "replace" ? ` <span style="font-size: 0.72rem; color: #b45309;">(instead of ${escapeHtml(n.replaces || "")})</span>` : "";
+          return `<tr><td style="${cell} padding-left: 22px;">${escapeHtml(n.name)}${tag}</td><td style="${num}">${fmtQ(qty)}</td><td style="${num} color: #b45309;">${fmtG(wt)}</td></tr>`;
+        }).join("");
+        html += `
+          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 14px; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            ${cols}
+            <tr style="background: #f1f5f9;">
+              <td style="${cell} font-weight: 800; color: #0f172a;">${swatchHtmlPrint(colorHexes(col), 13)}${escapeHtml(col.name || "Untitled color")}</td>
+              <td colspan="2" style="${num} font-weight: 800; color: #0f172a;">${sets} Set${sets === 1 ? "" : "s"}</td>
+            </tr>
+            ${rows || `<tr><td colspan="3" style="${cell} color: #94a3b8;">No nug types</td></tr>`}
+            <tr style="background: #fffbeb; font-weight: 700;">
+              <td style="${cell}">Total</td><td style="${num}">${fmtQ(q)}</td><td style="${num} color: #b45309;">${fmtG(w)}</td>
+            </tr>
+          </table>`;
+      });
+
+      const grand = nugGrandTotals();
+      if (grand.length) {
+        let gq = 0, gw = 0;
+        const rows = grand.map(g => {
+          gq += g.qty; gw += g.wt;
+          return `<tr><td style="${cell}">${escapeHtml(g.name)}</td><td style="${num}">${fmtQ(g.qty)}</td><td style="${num} color: #b45309;">${fmtG(g.wt)}</td></tr>`;
+        }).join("");
+        html += `
+          <div style="font-weight: 800; font-size: 1.05rem; color: #0f172a; margin: 22px 0 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">Total by Nug Type (all colors)</div>
+          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; border: 1px solid #cbd5e1; font-size: 0.9rem;">
+            ${cols}
+            <tr style="background: #f1f5f9; font-weight: 700; color: #334155;">
+              <td style="${cell}">Nug Type</td><td style="${num}">Total Qty</td><td style="${num}">Total Weight</td>
+            </tr>
+            ${rows}
+            <tr style="background: #0f172a; font-weight: 800;">
+              <td style="${cell} border-bottom: none; color: #ffffff !important; background: #0f172a;">GRAND TOTAL — All Types (${allSets} Sets)</td>
+              <td style="${num} border-bottom: none; color: #ffffff !important; background: #0f172a;">${fmtQ(gq)}</td>
+              <td style="${num} border-bottom: none; color: #fbbf24 !important; background: #0f172a;">${fmtG(gw)}</td>
+            </tr>
+          </table>`;
+      }
+      document.getElementById("short-sheet").innerHTML = html;
+    }
+
+    function showSharePreview(pdf) {
+      const box = document.getElementById("share-preview");
+      const pages = (pdf && pdf.__previews) || [];
+      document.getElementById("share-page-count").textContent = `${pages.length} page${pages.length === 1 ? "" : "s"}`;
+      box.innerHTML = pages.map((src, i) => `<img src="${src}" alt="Page ${i + 1}">${pages.length > 1 ? `<div class="pv-label">Page ${i + 1} of ${pages.length}</div>` : ""}`).join("");
+      box.style.display = pages.length ? "" : "none";
+      box.scrollTop = 0;
+    }
+
     async function makeSharePDF() {
       if (pdfBusy) return;
       const kind = shareKind();
@@ -4756,7 +4859,12 @@
       try {
         await withItemState(shareState.itemId, async () => {
           const base = `${safeFilePart(appState.setName, "Item")}_${safeFilePart(appState.invoiceNum, "000")}`;
-          if (kind === "gatepass") {
+          if (kind === "short") {
+            renderShortSheet();
+            shareState.pdf = await buildPagedPDF("short-sheet");
+            shareState.filename = `NugSheet_${base}.pdf`;
+            shareState.title = `${appState.setName || "Item"} - Nug Sheet`;
+          } else if (kind === "gatepass") {
             renderGatePass();
             shareState.pdf = await buildPagedPDF("gatepass-preview-container");
             shareState.filename = `GatePass_${base}.pdf`;
@@ -4769,6 +4877,7 @@
           }
         });
         document.getElementById("share-file-name").textContent = shareState.filename;
+        showSharePreview(shareState.pdf);
         document.getElementById("share-step-choose").style.display = "none";
         document.getElementById("share-step-ready").style.display = "block";
         const canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [new File([""], "x.pdf", { type: "application/pdf" })] }));
