@@ -1761,6 +1761,12 @@
               <label><input type="radio" name="print-mode" value="text"> Text <small style="color: var(--text-muted);">(all printers)</small></label>
               <label><input type="radio" name="print-mode" value="picture"> Picture</label>
             </div>
+            <div class="paper-row" id="slip-size-row" style="margin-top: 0; justify-content: center; flex-wrap: wrap;">
+              <span>Size:</span>
+              <label><input type="radio" name="slip-size" value="normal"> Normal</label>
+              <label><input type="radio" name="slip-size" value="small"> Small</label>
+              <label><input type="radio" name="slip-size" value="micro"> Micro</label>
+            </div>
             <button class="btn btn-primary" id="btn-thermal-bt" style="justify-content: center;"><i class="fa-brands fa-bluetooth-b"></i> <span id="thermal-bt-label">Print via Bluetooth</span></button>
             <button class="btn btn-outline-gold" id="btn-thermal-app" style="justify-content: center;"><i class="fa-solid fa-print"></i> Print with printer app (RawBT)</button>
             <button class="btn btn-secondary" id="btn-slip-pdf" style="justify-content: center;"><i class="fa-solid fa-file-pdf"></i> Share slip as PDF <small style="opacity: 0.7; margin-left: 4px;">(sharpest on WhatsApp)</small></button>
@@ -3158,7 +3164,8 @@
       (appState.colors || []).forEach(col => {
         const sets = col.setsCount || 0;
         nugsForColor(col).forEach(n => {
-          const key = `${n.name}|${n.weightPer100}|${n.materialCostPer100}`;
+          // Same name = same type, even if weight/rate was typed slightly differently in a color.
+          const key = String(n.name || "").trim().toLowerCase();
           const row = map.get(key) || { name: n.name, weightPer100: n.weightPer100, materialCostPer100: n.materialCostPer100, perSet: new Set(), qty: 0, wt: 0, mat: 0 };
           row.perSet.add(n.qtyPerSet);
           row.qty += n.qtyPerSet * sets;
@@ -5151,9 +5158,20 @@
     }
 
     // Lines of { t, bold, align, big } sized for the roll: 48 characters on 80mm, 32 on 58mm.
-    function buildThermalText(mm, withPrices) {
+    const STORAGE_KEY_SLIP_SIZE = "nug_calc_slip_size";
+
+    function slipSize() {
+      const el = document.querySelector('input[name="slip-size"]:checked');
+      return el ? el.value : "normal";
+    }
+
+    // Lines of { t, bold, align, big } for the roll.
+    // normal: Font A (48 cols on 80mm / 32 on 58mm). small & micro: Font B (64 / 42 cols), tighter lines.
+    // micro also puts each color on one line and lists only the types that differ.
+    function buildThermalText(mm, withPrices, size = "normal") {
       const st = appState;
-      const N = mm === 58 ? 32 : 48;
+      const small = size !== "normal";
+      const N = small ? (mm === 58 ? 42 : 64) : (mm === 58 ? 32 : 48);
       const QW = mm === 58 ? 7 : 9, WW = mm === 58 ? 9 : 11;
       const curr = asciiOnly(st.currency || "Rs.");
       const money = n => `${curr} ${(Number(n) || 0).toFixed(2)}`;
@@ -5163,66 +5181,114 @@
       const add = (t, o = {}) => L.push(Object.assign({ t: asciiOnly(t) }, o));
       const fit = (t, w) => (t.length > w ? t.slice(0, w) : t);
       const pad = (t, w, right) => { t = fit(asciiOnly(t), w); return right ? t.padStart(w) : t.padEnd(w); };
+      const wrapWords = (name, firstRoom, nextRoom) => {
+        const words = asciiOnly(name).split(/\s+/).filter(Boolean);
+        const lines = []; let cur = "";
+        words.forEach(wd => {
+          const room = lines.length ? nextRoom : firstRoom;
+          const t = cur ? cur + " " + wd : wd;
+          if (t.length <= room || !cur) cur = t.slice(0, room);
+          else { lines.push(cur); cur = wd.slice(0, nextRoom); }
+        });
+        lines.push(cur);
+        return lines;
+      };
+      // name | qty | weight  (money rows: name | wide number)
       const row = (name, q, w, o = {}) => {
-        // Money rows (no qty) give the number the qty column's space too.
         const numW = q === "" ? QW + WW : WW;
         const qW = q === "" ? 0 : QW;
         const nameW = N - qW - numW - 1;
-        const ind = o.indent ? " " : "";
-        // Word-wrap the name; numbers go on the first line.
-        const words = asciiOnly(name).split(/\s+/).filter(Boolean);
-        const lines = []; let cur = "";
-        const room = i => nameW - ind.length - (i ? 2 : 0);
-        words.forEach(wd => {
-          const t = cur ? cur + " " + wd : wd;
-          if (t.length <= room(lines.length) || !cur) cur = t.slice(0, room(lines.length) + 20);
-          else { lines.push(cur); cur = wd; }
-        });
-        lines.push(cur);
+        const ind = o.indent ? (o.indentText || " ") : "";
+        const lines = wrapWords(name, nameW - ind.length, nameW - ind.length - 2);
         add(pad(ind + lines[0], nameW) + " " + (qW ? pad(q, qW, true) : "") + pad(w, numW, true), o);
         lines.slice(1).forEach(l => add(pad(ind + "  " + l, N), o));
+      };
+      // micro color line: name | sets | pcs | weight
+      const SW = 5;
+      const crow = (name, sets, q, w, o = {}) => {
+        const nameW = N - SW - QW - WW - 1;
+        const lines = wrapWords(name, nameW, nameW - 2);
+        add(pad(lines[0], nameW) + " " + pad(sets, SW, true) + pad(q, QW, true) + pad(w, WW, true), o);
+        lines.slice(1).forEach(l => add(pad("  " + l, N), o));
       };
       const line = ch => add(ch.repeat(N));
 
       add(st.setName || "Untitled item", { bold: true, align: "center", big: true });
-      if (st.customerName) add(`Client: ${st.customerName}`, { align: "center" });
-      const meta = [st.invoiceNum ? `Inv# ${st.invoiceNum}` : "", st.date || ""].filter(Boolean).join("  ");
-      if (meta) add(meta, { align: "center" });
-      line("=");
-      row("Nug type", "Qty", "Weight", { bold: true });
+      const meta = [st.customerName ? `Client: ${st.customerName}` : "", st.invoiceNum ? `Inv# ${st.invoiceNum}` : "", st.date || ""].filter(Boolean);
+      if (small) { if (meta.length) add(meta.join("  "), { align: "center" }); }
+      else {
+        if (st.customerName) add(`Client: ${st.customerName}`, { align: "center" });
+        const m2 = meta.filter(x => !x.startsWith("Client"));
+        if (m2.length) add(m2.join("  "), { align: "center" });
+      }
       line("=");
 
       let allSets = 0;
-      st.colors.forEach(col => {
-        const sets = col.setsCount || 0;
-        allSets += sets;
-        const t = colorTotals(col);
-        const head = asciiOnly(col.name || "Untitled color"), right = `${sets} Set${sets === 1 ? "" : "s"}`;
-        add(pad(head, N - right.length - 1) + " " + right, { bold: true });
-        t.list.forEach(n => {
-          const qty = (n.qtyPerSet || 0) * sets;
-          const wt = ((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100) * sets;
-          row(n.status === "replace" ? `${n.name}*` : n.name, pcs(qty), g(wt), { indent: true });
-        });
-        row("Total", pcs(t.nugs), g(t.wt), { bold: true });
-        if (withPrices) {
-          const cost = t.mat + (t.nugs / 100) * (st.globalLaborCostPer100 || 0) + t.mat * ((st.wastePercent || 0) / 100);
-          row("Cost", "", money(cost));
+      st.colors.forEach(c => { allSets += c.setsCount || 0; });
+      const replacedMark = st.colors.some(c => colorTotals(c).list.some(n => n.status === "replace"));
+
+      if (size === "micro") {
+        // Common recipe per set, so each color fits on one line.
+        if (st.nugTypes.length) {
+          row("PER SET (common)", "pcs", "g/set", { bold: true });
+          st.nugTypes.forEach(n => row(n.name, pcs(n.qtyPerSet), g((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100), { indent: true }));
+          line("-");
         }
+        crow("COLOR", "Sets", "Pcs", "Weight", { bold: true });
         line("-");
-      });
-      if (st.colors.some(c => colorTotals(c).list.some(n => n.status === "replace"))) add("* replaced for this color");
+        st.colors.forEach(col => {
+          const t = colorTotals(col);
+          crow(col.name || "Untitled color", String(col.setsCount || 0), pcs(t.nugs), g(t.wt), { bold: true });
+          const ov = col.overrides || {};
+          st.nugTypes.forEach(n => {
+            const o = ov[n.id];
+            if (!o) return;
+            if (o.mode === "skip") add(pad(`   - no ${n.name}`, N));
+            else if (o.mode === "replace") {
+              const sets = col.setsCount || 0;
+              row(`${o.name || "?"}*`, pcs((o.qtyPerSet || 0) * sets), g(((o.qtyPerSet || 0) * (o.weightPer100 || 0) / 100) * sets), { indent: true, indentText: "   " });
+            }
+          });
+          if (withPrices) {
+            const cost = t.mat + (t.nugs / 100) * (st.globalLaborCostPer100 || 0) + t.mat * ((st.wastePercent || 0) / 100);
+            row("   cost", "", money(cost));
+          }
+        });
+        line("-");
+        if (replacedMark) add("* used instead of the common type for that color");
+      } else {
+        row("Nug type", "Qty", "Weight", { bold: true });
+        line("=");
+        st.colors.forEach(col => {
+          const sets = col.setsCount || 0;
+          const t = colorTotals(col);
+          const head = asciiOnly(col.name || "Untitled color"), right = `${sets} Set${sets === 1 ? "" : "s"}`;
+          add(pad(head, N - right.length - 1) + " " + right, { bold: true });
+          t.list.forEach(n => {
+            const qty = (n.qtyPerSet || 0) * sets;
+            const wt = ((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100) * sets;
+            row(n.status === "replace" ? `${n.name}*` : n.name, pcs(qty), g(wt), { indent: true });
+          });
+          row("Total", pcs(t.nugs), g(t.wt), { bold: true });
+          if (withPrices) {
+            const cost = t.mat + (t.nugs / 100) * (st.globalLaborCostPer100 || 0) + t.mat * ((st.wastePercent || 0) / 100);
+            row("Cost", "", money(cost));
+          }
+          line("-");
+        });
+        if (replacedMark) add("* replaced for this color");
+      }
 
       const grand = nugGrandTotals();
       if (grand.length) {
-        add("");
+        if (!small) add("");
         add("TOTAL BY NUG TYPE", { bold: true, align: "center" });
         line("=");
         let gq = 0, gw = 0;
         grand.forEach(x => { gq += x.qty; gw += x.wt; row(x.name, pcs(x.qty), g(x.wt)); });
         line("=");
         row("ALL TYPES", pcs(gq), g(gw), { bold: true });
-        add(`${allSets} sets - ${grand.length} nug types`);
+        add(`${allSets} sets - ${st.colors.length} colors - ${grand.length} nug types`);
         if (withPrices) {
           const m = calculate() || {};
           line("-");
@@ -5234,20 +5300,24 @@
         line("=");
       }
       add(new Date().toLocaleString(), { align: "center" });
+      L.size = size;
       return L;
     }
 
     function textToEscPos(lines) {
+      const small = lines.size && lines.size !== "normal";
       const out = [0x1B, 0x40, 0x1B, 0x74, 0x00]; // init, PC437
+      if (small) out.push(0x1B, 0x4D, 0x01, 0x1B, 0x33, lines.size === "micro" ? 18 : 20); // Font B, tight line spacing
       const enc = t => { for (let i = 0; i < t.length; i++) out.push(t.charCodeAt(i) & 0x7F); };
       lines.forEach(l => {
         out.push(0x1B, 0x61, l.align === "center" ? 1 : 0); // align
         out.push(0x1B, 0x45, l.bold ? 1 : 0);              // bold
-        out.push(0x1D, 0x21, l.big ? 0x11 : 0x00);         // double size for the title
+        out.push(0x1D, 0x21, l.big ? (small ? 0x01 : 0x11) : 0x00); // title: double size (tall only when small)
         enc(l.t);
         out.push(0x0A);
       });
       out.push(0x1B, 0x61, 0, 0x1B, 0x45, 0, 0x1D, 0x21, 0);
+      if (small) out.push(0x1B, 0x4D, 0x00, 0x1B, 0x32); // back to Font A, normal spacing
       out.push(0x1B, 0x64, 0x04, 0x1D, 0x56, 0x42, 0x00); // feed, cut
       return new Uint8Array(out);
     }
@@ -5420,10 +5490,12 @@
       if (!shareState.slip) return;
       box.classList.add("thermal");
       box.style.display = "";
+      document.getElementById("slip-size-row").style.display = printMode() === "text" ? "flex" : "none";
       if (printMode() === "text" && shareState.slipText) {
-        const cols = shareState.slipMM === 58 ? 32 : 48;
+        const small = shareState.slipText.size && shareState.slipText.size !== "normal";
+        const cols = small ? (shareState.slipMM === 58 ? 42 : 64) : (shareState.slipMM === 58 ? 32 : 48);
         box.innerHTML = `<pre class="slip-text" style="--cols: ${cols};">${shareState.slipText.map(l => {
-          const t = escapeHtml(l.align === "center" ? l.t.padStart(Math.floor((cols / (l.big ? 2 : 1) + l.t.length) / 2)) : l.t);
+          const t = escapeHtml(l.align === "center" ? l.t.padStart(Math.floor((cols / (l.big && !small ? 2 : 1) + l.t.length) / 2)) : l.t);
           return l.big ? `<b class="big">${t}</b>` : l.bold ? `<b>${t}</b>` : t;
         }).join("\n")}</pre>`;
       } else {
@@ -5444,7 +5516,8 @@
             shareState.slip = buildThermalSlip(paperMM(), withPrices);
             shareState.slipHi = buildThermalSlip(paperMM(), withPrices, true);
             shareState.slipMM = paperMM();
-            shareState.slipText = buildThermalText(paperMM(), withPrices);
+            shareState.slipText = buildThermalText(paperMM(), withPrices, slipSize());
+            shareState.slipWithPrices = withPrices;
             shareState.pdf = null;
             shareState.filename = `Slip_${safeFilePart(appState.setName, "Item")}_${safeFilePart(appState.invoiceNum, "000")}.png`;
             shareState.title = `${appState.setName || "Item"} - Print Slip`;
@@ -5538,6 +5611,19 @@
       if (modeEl) modeEl.checked = true;
       document.querySelectorAll('input[name="print-mode"]').forEach(r => r.addEventListener("change", () => {
         try { localStorage.setItem(STORAGE_KEY_PRINT_MODE, printMode()); } catch (_) {}
+        showThermalPreview();
+      }));
+      let savedSize = "normal";
+      try { savedSize = localStorage.getItem(STORAGE_KEY_SLIP_SIZE) || "normal"; } catch (_) {}
+      const sizeEl = document.querySelector(`input[name="slip-size"][value="${["normal", "small", "micro"].includes(savedSize) ? savedSize : "normal"}"]`);
+      if (sizeEl) sizeEl.checked = true;
+      document.querySelectorAll('input[name="slip-size"]').forEach(r => r.addEventListener("change", async () => {
+        try { localStorage.setItem(STORAGE_KEY_SLIP_SIZE, slipSize()); } catch (_) {}
+        if (!shareState.slip) return;
+        await withItemState(shareState.itemId, async () => {
+          calculate();
+          shareState.slipText = buildThermalText(shareState.slipMM || paperMM(), !!shareState.slipWithPrices, slipSize());
+        });
         showThermalPreview();
       }));
       document.getElementById("btn-slip-share").addEventListener("click", shareSlip);
