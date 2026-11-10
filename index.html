@@ -5170,15 +5170,29 @@
     // micro also puts each color on one line and lists only the types that differ.
     function buildThermalText(mm, withPrices, size = "normal") {
       const st = appState;
+      // Always the printer's normal font (many printers have no small font): 48 cols on 80mm, 32 on 58mm.
       const small = size !== "normal";
-      const N = small ? (mm === 58 ? 42 : 64) : (mm === 58 ? 32 : 48);
-      const QW = mm === 58 ? 7 : 9, WW = mm === 58 ? 9 : 11;
+      const N = mm === 58 ? 32 : 48;
+      const QW = mm === 58 ? (size === "micro" ? 6 : 7) : (size === "micro" ? 7 : 9);
+      const WW = mm === 58 ? 8 : (size === "micro" ? 9 : 11);
       const curr = asciiOnly(st.currency || "Rs.");
       const money = n => `${curr} ${(Number(n) || 0).toFixed(2)}`;
       const pcs = n => `${Math.round(Number(n) || 0)}`;
       const g = n => `${(Number(n) || 0).toFixed(2)}g`;
       const L = [];
-      const add = (t, o = {}) => L.push(Object.assign({ t: asciiOnly(t) }, o));
+      // Any line longer than the roll wraps at word boundaries.
+      const add = (t, o = {}) => {
+        t = asciiOnly(t);
+        const max = o.big && !small ? Math.floor(N / 2) : N;
+        if (t.length <= max) { L.push(Object.assign({ t }, o)); return; }
+        let cur = "";
+        t.split(" ").forEach(w => {
+          const nx = cur ? cur + " " + w : w;
+          if (nx.length <= max) cur = nx;
+          else { if (cur) L.push(Object.assign({ t: cur }, o)); cur = w.slice(0, max); }
+        });
+        if (cur) L.push(Object.assign({ t: cur }, o));
+      };
       const fit = (t, w) => (t.length > w ? t.slice(0, w) : t);
       const pad = (t, w, right) => { t = fit(asciiOnly(t), w); return right ? t.padStart(w) : t.padEnd(w); };
       const wrapWords = (name, firstRoom, nextRoom) => {
@@ -5204,7 +5218,7 @@
         lines.slice(1).forEach(l => add(pad(ind + "  " + l, N), o));
       };
       // micro color line: name | sets | pcs | weight
-      const SW = 5;
+      const SW = mm === 58 ? 4 : 5;
       const crow = (name, sets, q, w, o = {}) => {
         const nameW = N - SW - QW - WW - 1;
         const lines = wrapWords(name, nameW, nameW - 2);
@@ -5228,12 +5242,6 @@
       const replacedMark = st.colors.some(c => colorTotals(c).list.some(n => n.status === "replace"));
 
       if (size === "micro") {
-        // Common recipe per set, so each color fits on one line.
-        if (st.nugTypes.length) {
-          row("PER SET (common)", "pcs", "g/set", { bold: true });
-          st.nugTypes.forEach(n => row(n.name, pcs(n.qtyPerSet), g((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100), { indent: true }));
-          line("-");
-        }
         crow("COLOR", "Sets", "Pcs", "Weight", { bold: true });
         line("-");
         st.colors.forEach(col => {
@@ -5255,7 +5263,7 @@
           }
         });
         line("-");
-        if (replacedMark) add("* used instead of the common type for that color");
+        if (replacedMark) add("* used instead of the common type");
       } else {
         row("Nug type", "Qty", "Weight", { bold: true });
         line("=");
@@ -5307,17 +5315,18 @@
     function textToEscPos(lines) {
       const small = lines.size && lines.size !== "normal";
       const out = [0x1B, 0x40, 0x1B, 0x74, 0x00]; // init, PC437
-      if (small) out.push(0x1B, 0x4D, 0x01, 0x1B, 0x33, lines.size === "micro" ? 18 : 20); // Font B, tight line spacing
+      // Slightly tighter lines for Small/Micro; 26 dots still clears the 24-dot font so letters don't touch.
+      if (small) out.push(0x1B, 0x33, 26);
       const enc = t => { for (let i = 0; i < t.length; i++) out.push(t.charCodeAt(i) & 0x7F); };
       lines.forEach(l => {
         out.push(0x1B, 0x61, l.align === "center" ? 1 : 0); // align
         out.push(0x1B, 0x45, l.bold ? 1 : 0);              // bold
-        out.push(0x1D, 0x21, l.big ? (small ? 0x01 : 0x11) : 0x00); // title: double size (tall only when small)
+        out.push(0x1D, 0x21, l.big ? (small ? 0x01 : 0x11) : 0x00); // title: double size (only taller when small)
         enc(l.t);
         out.push(0x0A);
       });
       out.push(0x1B, 0x61, 0, 0x1B, 0x45, 0, 0x1D, 0x21, 0);
-      if (small) out.push(0x1B, 0x4D, 0x00, 0x1B, 0x32); // back to Font A, normal spacing
+      if (small) out.push(0x1B, 0x32); // back to normal spacing
       out.push(0x1B, 0x64, 0x04, 0x1D, 0x56, 0x42, 0x00); // feed, cut
       return new Uint8Array(out);
     }
@@ -5493,7 +5502,7 @@
       document.getElementById("slip-size-row").style.display = printMode() === "text" ? "flex" : "none";
       if (printMode() === "text" && shareState.slipText) {
         const small = shareState.slipText.size && shareState.slipText.size !== "normal";
-        const cols = small ? (shareState.slipMM === 58 ? 42 : 64) : (shareState.slipMM === 58 ? 32 : 48);
+        const cols = shareState.slipMM === 58 ? 32 : 48;
         box.innerHTML = `<pre class="slip-text" style="--cols: ${cols};">${shareState.slipText.map(l => {
           const t = escapeHtml(l.align === "center" ? l.t.padStart(Math.floor((cols / (l.big && !small ? 2 : 1) + l.t.length) / 2)) : l.t);
           return l.big ? `<b class="big">${t}</b>` : l.bold ? `<b>${t}</b>` : t;
