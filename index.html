@@ -1769,6 +1769,10 @@
               <button class="btn btn-secondary" id="btn-slip-download" style="justify-content: center;"><i class="fa-solid fa-download"></i> Download</button>
             </div>
             <button class="btn btn-secondary btn-sm" id="btn-thermal-test" style="justify-content: center;"><i class="fa-solid fa-vial"></i> Test print (find what works)</button>
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
+              <span id="thermal-info" class="thermal-help" style="text-align: center;"></span>
+              <button class="btn btn-secondary btn-sm" id="btn-thermal-forget" style="display: none; padding: 4px 10px; font-size: 0.72rem;">Change printer</button>
+            </div>
             <p class="thermal-help"><strong>Blank paper?</strong> 1) Check the roll: scratch the paper with a fingernail — the side that turns dark must face the print head. 2) Use <strong>Text</strong> mode. 3) Tap Test print: if the text prints but not the black bar, keep Text mode.</p>
             <p class="thermal-help">If Bluetooth print doesn't find your printer, use the printer app: install <strong>RawBT</strong> from Play Store once, pair the printer in it, then tap the button above and choose RawBT.</p>
           </div>
@@ -5075,15 +5079,60 @@
       "49535343-fe7d-4ae5-8fa9-9fafd205e455"
     ];
 
+    // The print channel each common printer chip uses (service -> write characteristic).
+    const KNOWN_PRINT_CHANNELS = {
+      "000018f0-0000-1000-8000-00805f9b34fb": "00002af1-0000-1000-8000-00805f9b34fb",
+      "e7810a71-73ae-499d-8c15-faa9aef0c3f2": "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f",
+      "49535343-fe7d-4ae5-8fa9-9fafd205e455": "49535343-8841-43f4-a8d4-ecbe34729bb3",
+      "0000ff00-0000-1000-8000-00805f9b34fb": "0000ff02-0000-1000-8000-00805f9b34fb",
+      "0000ffe0-0000-1000-8000-00805f9b34fb": "0000ffe1-0000-1000-8000-00805f9b34fb",
+      "0000ae30-0000-1000-8000-00805f9b34fb": "0000ae01-0000-1000-8000-00805f9b34fb",
+      "0000af30-0000-1000-8000-00805f9b34fb": "0000af01-0000-1000-8000-00805f9b34fb",
+      "0000fee7-0000-1000-8000-00805f9b34fb": "0000fec7-0000-1000-8000-00805f9b34fb"
+    };
+
     async function findWritable(server) {
       const services = await server.getPrimaryServices();
+      // 1st choice: a known print channel.
       for (const svc of services) {
+        const want = KNOWN_PRINT_CHANNELS[svc.uuid];
+        if (!want) continue;
+        try {
+          const ch = await svc.getCharacteristic(want);
+          if (ch && (ch.properties.write || ch.properties.writeWithoutResponse)) return ch;
+        } catch (_) {}
+      }
+      // Otherwise: any writable characteristic, printer services first.
+      const ordered = services.slice().sort((x, y) => (PRINTER_SERVICES.includes(y.uuid) ? 1 : 0) - (PRINTER_SERVICES.includes(x.uuid) ? 1 : 0));
+      for (const svc of ordered) {
         let chars = [];
         try { chars = await svc.getCharacteristics(); } catch (_) { continue; }
         const ch = chars.find(c => c.properties.writeWithoutResponse) || chars.find(c => c.properties.write);
         if (ch) return ch;
       }
       return null;
+    }
+
+    function shortUuid(u) {
+      const m = /^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/i.exec(u || "");
+      return m ? m[1] : String(u || "").split("-").slice(0, 2).join("-");
+    }
+
+    function forgetPrinter() {
+      try { if (thermal.device && thermal.device.gatt.connected) thermal.device.gatt.disconnect(); } catch (_) {}
+      thermal.device = null;
+      thermal.characteristic = null;
+      document.getElementById("thermal-info").textContent = "";
+      document.getElementById("btn-thermal-forget").style.display = "none";
+      document.getElementById("thermal-bt-label").textContent = "Print via Bluetooth";
+    }
+
+    function showPrinterInfo() {
+      document.getElementById("btn-thermal-forget").style.display = thermal.device ? "" : "none";
+      const el = document.getElementById("thermal-info");
+      const ch = thermal.characteristic;
+      if (!el || !thermal.device) return;
+      el.textContent = `Printer: ${thermal.device.name || "unnamed"} · channel ${ch ? shortUuid(ch.service.uuid) + "/" + shortUuid(ch.uuid) : "?"}`;
     }
 
     /* ---------- Text mode: the slip as plain printer text (works on every ESC/POS printer) ---------- */
@@ -5253,6 +5302,7 @@
         await connectPrinter(label);
         const data = makeBytes();
         await btSend(data, f => { label.textContent = `Printing… ${Math.round(f * 100)}%`; });
+        showPrinterInfo();
         showToast("Sent to printer.", "success");
       } catch (err) {
         console.error(err);
@@ -5481,6 +5531,7 @@
       document.getElementById("btn-thermal-bt").addEventListener("click", printViaBluetooth);
       document.getElementById("btn-thermal-app").addEventListener("click", printViaApp);
       document.getElementById("btn-thermal-test").addEventListener("click", testPrint);
+      document.getElementById("btn-thermal-forget").addEventListener("click", forgetPrinter);
       let savedMode = "text";
       try { savedMode = localStorage.getItem(STORAGE_KEY_PRINT_MODE) || "text"; } catch (_) {}
       const modeEl = document.querySelector(`input[name="print-mode"][value="${savedMode === "picture" ? "picture" : "text"}"]`);
