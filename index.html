@@ -5242,27 +5242,45 @@
       const replacedMark = st.colors.some(c => colorTotals(c).list.some(n => n.status === "replace"));
 
       if (size === "micro") {
-        crow("COLOR", "Sets", "Pcs", "Weight", { bold: true });
-        line("-");
-        st.colors.forEach(col => {
+        // Colors side by side: 2 per line on 80mm (23 chars each), 1 per line on 58mm.
+        // Each color block: "Name  N sets", then every nug type with qty & weight, then the total.
+        const per = mm === 58 ? 1 : 2;
+        const BW = per === 2 ? Math.floor((N - 2) / 2) : N;   // 23 on 80mm, 32 on 58mm
+        const bq = per === 2 ? 5 : 6, bw = per === 2 ? 6 : 8;  // qty and weight widths
+        const bn = BW - bq - bw - 2;                            // name width (10 on 80mm)
+        const gw = n => per === 2 ? (Number(n) || 0).toFixed(2) : g(n); // "g" left off in the narrow 2-up blocks
+        const cut = (t, w) => { t = asciiOnly(t); return t.length > w ? t.slice(0, w) : t; };
+        const typeLine = (name, q, w) => pad(cut(name, bn), bn) + " " + pad(q, bq, true) + " " + pad(w, bw, true);
+        const blocks = st.colors.map(col => {
+          const sets = col.setsCount || 0;
           const t = colorTotals(col);
-          crow(col.name || "Untitled color", String(col.setsCount || 0), pcs(t.nugs), g(t.wt), { bold: true });
-          const ov = col.overrides || {};
-          st.nugTypes.forEach(n => {
-            const o = ov[n.id];
-            if (!o) return;
-            if (o.mode === "skip") add(pad(`   - no ${n.name}`, N));
-            else if (o.mode === "replace") {
-              const sets = col.setsCount || 0;
-              row(`${o.name || "?"}*`, pcs((o.qtyPerSet || 0) * sets), g(((o.qtyPerSet || 0) * (o.weightPer100 || 0) / 100) * sets), { indent: true, indentText: "   " });
-            }
+          const setsTxt = ` ${sets} set${sets === 1 ? "" : "s"}`;
+          const head = pad(cut(col.name || "Untitled", BW - setsTxt.length) + setsTxt, BW);
+          const types = t.list.map(n => {
+            const qty = (n.qtyPerSet || 0) * sets;
+            const wt = ((n.qtyPerSet || 0) * (n.weightPer100 || 0) / 100) * sets;
+            const nm = n.status === "replace" ? cut(n.name, bn - 1) + "*" : n.name;
+            return typeLine(nm, pcs(qty), gw(wt));
           });
+          const total = typeLine("Total", pcs(t.nugs), gw(t.wt));
+          let cost = null;
           if (withPrices) {
-            const cost = t.mat + (t.nugs / 100) * (st.globalLaborCostPer100 || 0) + t.mat * ((st.wastePercent || 0) / 100);
-            row("   cost", "", money(cost));
+            const c = t.mat + (t.nugs / 100) * (st.globalLaborCostPer100 || 0) + t.mat * ((st.wastePercent || 0) / 100);
+            cost = pad(money(c), BW, true);
           }
+          return { head, types, total, cost };
         });
-        line("-");
+        if (per === 2) add(typeLine("Type", "Qty", "Wt(g)") + "  " + typeLine("Type", "Qty", "Wt(g)"));
+        for (let i = 0; i < blocks.length; i += per) {
+          const grp = blocks.slice(i, i + per);
+          const rows = Math.max(...grp.map(b => b.types.length));
+          const join = parts => parts.map(x => pad(x, BW)).join("  ").replace(/\s+$/, "");
+          add(join(grp.map(b => b.head)), { bold: true });
+          for (let r = 0; r < rows; r++) add(join(grp.map(b => b.types[r] || "")));
+          add(join(grp.map(b => b.total)), { bold: true });
+          if (withPrices) add(join(grp.map(b => b.cost || "")));
+          line("-");
+        }
         if (replacedMark) add("* used instead of the common type");
       } else {
         row("Nug type", "Qty", "Weight", { bold: true });
