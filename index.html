@@ -1756,8 +1756,9 @@
           <div id="thermal-actions" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 10px;">
             <button class="btn btn-primary" id="btn-thermal-bt" style="justify-content: center;"><i class="fa-brands fa-bluetooth-b"></i> <span id="thermal-bt-label">Print via Bluetooth</span></button>
             <button class="btn btn-outline-gold" id="btn-thermal-app" style="justify-content: center;"><i class="fa-solid fa-print"></i> Print with printer app (RawBT)</button>
+            <button class="btn btn-secondary" id="btn-slip-pdf" style="justify-content: center;"><i class="fa-solid fa-file-pdf"></i> Share slip as PDF <small style="opacity: 0.7; margin-left: 4px;">(sharpest on WhatsApp)</small></button>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-              <button class="btn btn-secondary" id="btn-slip-share" style="justify-content: center;"><i class="fa-solid fa-share-nodes"></i> Share slip</button>
+              <button class="btn btn-secondary" id="btn-slip-share" style="justify-content: center;"><i class="fa-solid fa-image"></i> Share picture</button>
               <button class="btn btn-secondary" id="btn-slip-download" style="justify-content: center;"><i class="fa-solid fa-download"></i> Download</button>
             </div>
             <p class="thermal-help">If Bluetooth print doesn't find your printer, use the printer app: install <strong>RawBT</strong> from Play Store once, pair the printer in it, then tap the button above and choose RawBT.</p>
@@ -4892,7 +4893,8 @@
       return el && el.value === "58" ? 58 : 80;
     }
 
-    function buildThermalSlip(mm, withPrices) {
+    // forShare: a sharp, high-resolution copy for WhatsApp / zooming (not for the printer).
+    function buildThermalSlip(mm, withPrices, forShare = false) {
       const st = appState;
       const W = mm === 58 ? 384 : 576;
       const base = mm === 58 ? 20 : 25;
@@ -4984,9 +4986,12 @@
       gap(30);
 
       const H = ops.reduce((sum, o) => sum + o.h, 0) + 10;
+      // Up to 3x sharper for sharing, kept under ~16 million pixels (phone canvas limit).
+      const k = forShare ? Math.max(1, Math.min(3, Math.sqrt(16e6 / (W * H)))) : 1;
       const c = document.createElement("canvas");
-      c.width = W; c.height = H;
+      c.width = Math.round(W * k); c.height = Math.round(H * k);
       const ctx = c.getContext("2d");
+      ctx.scale(k, k);
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = "#000"; ctx.strokeStyle = "#000";
       ctx.textBaseline = "top";
@@ -5009,6 +5014,8 @@
         }
         y += o.h;
       });
+
+      if (forShare) return c; // keep smooth edges so text stays clean when zoomed
 
       // Pure black & white (thermal printers can't print grey).
       const img = ctx.getImageData(0, 0, W, H);
@@ -5134,10 +5141,41 @@
       showToast("Slip image downloaded — open it with RawBT or your printer app.", "info");
     }
 
+    function slipHiBlob() {
+      const c = shareState.slipHi || shareState.slip;
+      return new Promise(resolve => c.toBlob(resolve, "image/png"));
+    }
+
+    // The slip as a PDF the width of the paper roll — WhatsApp sends documents without shrinking them.
+    function slipPdf() {
+      const jsPdfObj = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      if (!jsPdfObj) return null;
+      const c = shareState.slipHi || shareState.slip;
+      const w = shareState.slipMM || 80;
+      const h = w * c.height / c.width;
+      const pdf = new jsPdfObj({ orientation: "p", unit: "mm", format: [w, h] });
+      pdf.addImage(c.toDataURL("image/png"), "PNG", 0, 0, w, h);
+      return pdf;
+    }
+
+    async function shareSlipPdf() {
+      if (!shareState.slip) return;
+      const pdf = slipPdf();
+      if (!pdf) { showToast("PDF maker didn't load (check internet). Use Share slip instead.", "danger"); return; }
+      const name = shareState.filename.replace(/\.png$/i, ".pdf");
+      const file = new File([pdf.output("blob")], name, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: shareState.title }); return; }
+        catch (err) { if (err && err.name === "AbortError") return; }
+      }
+      pdf.save(name);
+      showToast("Sharing not available here — PDF downloaded instead.", "info");
+    }
+
     // Share the slip as a picture (WhatsApp, Gmail, etc.).
     async function shareSlip() {
       if (!shareState.slip) return;
-      const blob = await slipBlob();
+      const blob = await slipHiBlob();
       const file = new File([blob], shareState.filename, { type: "image/png" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try { await navigator.share({ files: [file], title: shareState.title }); return; }
@@ -5149,7 +5187,7 @@
 
     async function downloadSlip() {
       if (!shareState.slip) return;
-      downloadBlob(await slipBlob(), shareState.filename);
+      downloadBlob(await slipHiBlob(), shareState.filename);
       showToast("Slip image downloaded.", "success");
     }
 
@@ -5163,6 +5201,8 @@
           await withItemState(shareState.itemId, async () => {
             calculate();
             shareState.slip = buildThermalSlip(paperMM(), withPrices);
+            shareState.slipHi = buildThermalSlip(paperMM(), withPrices, true);
+            shareState.slipMM = paperMM();
             shareState.pdf = null;
             shareState.filename = `Slip_${safeFilePart(appState.setName, "Item")}_${safeFilePart(appState.invoiceNum, "000")}.png`;
             shareState.title = `${appState.setName || "Item"} - Print Slip`;
@@ -5174,7 +5214,7 @@
         }
         const box = document.getElementById("share-preview");
         box.classList.add("thermal");
-        box.innerHTML = `<img src="${shareState.slip.toDataURL("image/png")}" alt="Print slip">`;
+        box.innerHTML = `<img src="${(shareState.slipHi || shareState.slip).toDataURL("image/png")}" alt="Print slip" style="width: ${shareState.slip.width}px;">`;
         box.style.display = "";
         box.scrollTop = 0;
         document.getElementById("share-page-count").textContent = `${paperMM()}mm`;
@@ -5253,6 +5293,7 @@
       document.getElementById("btn-thermal-bt").addEventListener("click", printViaBluetooth);
       document.getElementById("btn-thermal-app").addEventListener("click", printViaApp);
       document.getElementById("btn-slip-share").addEventListener("click", shareSlip);
+      document.getElementById("btn-slip-pdf").addEventListener("click", shareSlipPdf);
       document.getElementById("btn-slip-download").addEventListener("click", downloadSlip);
       document.getElementById("btn-share-make").addEventListener("click", makeSharePDF);
       document.getElementById("btn-share-send").addEventListener("click", sendSharePDF);
